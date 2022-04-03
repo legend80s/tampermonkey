@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NPM Badge
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      2.0
 // @description  try to take over the world!
 // @author       You
 // @match        https://github.com/*/*
@@ -26,6 +26,28 @@
   await main()
   console.timeEnd(label + ' costs')
 
+  // https://github.com/sveltejs/kit/blob/master/packages/kit/package.json =>
+  // https://raw.githubusercontent.com/sveltejs/kit/master/packages/kit/package.json
+  //
+  // https://github.com/gcanti/newtype-ts/blob/master/package.json =>
+  // https://raw.githubusercontent.com/gcanti/newtype-ts/master/package.json
+  function toRawPath(url) {
+    return url.replace('github.com', 'raw.githubusercontent.com')
+      .replace('/blob/master/', '/master/')
+  }
+
+  async function findPackageJSONURL() {
+    await ready('.Box-row');
+    const node = queryChild('.Box-row a', a => a.textContent === 'package.json');
+    // log('queryChild node', node)
+
+    return node?.href || '';
+  }
+
+  async function findPackageJSONRawPath() {
+    return toRawPath(await findPackageJSONURL());
+  }
+
   async function main() {
     // Refused to execute inline event handler because it violates the following Content Security Policy directive: "script-src 'unsafe-eval' github.githubassets.com"
     // document.head.insertAdjacentHTML('beforeend', `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-eval' *">`)
@@ -33,11 +55,12 @@
     const host = '.markdown-body h1';
 
     // Your code here...
-    const [err1, packageJSON] = await box(fetch(`https://raw.githubusercontent.com/${location.pathname}/master/package.json`).then(resp => resp.json()));
+    const path = await findPackageJSONRawPath();
+    const [err1, packageJSON] = await box(fetch(path).then(resp => resp.json()));
     if (err1) {
-      error('fetch package.json failed', err1);
+      error(`fetch package.json failed: path = "${path}"`, err1);
 
-      await ready(host)
+      if (!(await ready(host))[0]) { return; }
 
       await insertUnpublishedBadge(host);
 
@@ -45,7 +68,7 @@
     }
 
     const { name, description, version } = packageJSON;
-    const imgURL = `https://img.shields.io/npm/v/${name}.svg`;
+    const imgURL = `https://img.shields.io/npm/v/${name}?logo=npm`;
     const link = `https://www.npmjs.com/package/${name}`;
     const alt = `${name}@${version}: ${description}`;
 
@@ -60,9 +83,11 @@
     </a>`;
 
     // $$('.markdown-body h1')[0].insertAdjacentHTML('afterend', `<img src="https://img.shields.io/npm/v/react.svg" alt="npm version" />`);
-    const hostNode = (await ready(host))[1];
+    const hostNode = (await ready(host, { timeout: 3000 }))[1];
 
-    if (queryChild($('.markdown-body'), 'img', (img) => { return img.dataset.canonicalSrc.includes('/npm/v/'); })) {
+    if (!hostNode) { return; }
+
+    if (queryChild('.markdown-body img', (img) => { return img.dataset.canonicalSrc?.includes('/npm/v/'); })) {
       // data-canonical-src="https://img.shields.io/npm/v/verb-corpus.svg"
 
       return;
@@ -71,8 +96,8 @@
     hostNode.insertAdjacentHTML('afterend', npmBadgeHtml);
   }
 
-  function queryChild(parent, selector, predicate) {
-    return [...parent.querySelectorAll(selector)].find(e => predicate(e))
+  function queryChild(selector, predicate) {
+    return $$(selector).find(e => predicate(e))
   }
 
   async function generateSafeImageHTML(imgURL, alt) {
@@ -88,7 +113,7 @@
   }
 
   async function insertUnpublishedBadge(host) {
-    const unpublished = `https://img.shields.io/badge/npm-unpublished-yellow`;
+    const unpublished = `https://img.shields.io/badge/npm-unpublished-yellow?logo=npm`;
     const img = await generateSafeImageHTML(unpublished, 'not published yet');
 
     const name = $('.markdown-body h1').textContent.trim()
@@ -113,15 +138,16 @@
     }
   }
 
-  async function ready(sentry) {
+  async function ready(sentry, { timeout = 10 * 1000, interval = 200 } = {}) {
     await sleep(10)
-    const timeout = 10 * 1000;
-    const interval = 200;
+
     for (let i = 0; i < timeout / interval; i++) {
       if ($(sentry)) { return [true, $(sentry)] }
 
       await sleep(interval);
     }
+
+    error(`element "${sentry}" not found after ${timeout / 1000}s!`)
 
     return [false, $(sentry)]
   }
