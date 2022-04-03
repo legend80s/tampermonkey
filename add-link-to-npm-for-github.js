@@ -30,12 +30,16 @@
     // Refused to execute inline event handler because it violates the following Content Security Policy directive: "script-src 'unsafe-eval' github.githubassets.com"
     // document.head.insertAdjacentHTML('beforeend', `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-eval' *">`)
 
+    const host = '.markdown-body h1';
+
     // Your code here...
     const [err1, packageJSON] = await box(fetch(`https://raw.githubusercontent.com/${location.pathname}/master/package.json`).then(resp => resp.json()));
     if (err1) {
       error('fetch package.json failed', err1);
 
-      await insertUnpublishedBadge();
+      await ready(host)
+
+      await insertUnpublishedBadge(host);
 
       return;
     }
@@ -57,7 +61,7 @@
 
     // $$('.markdown-body h1')[0].insertAdjacentHTML('afterend', `<img src="https://img.shields.io/npm/v/react.svg" alt="npm version" />`);
 
-    $('.markdown-body h1').insertAdjacentHTML('afterend', npmBadgeHtml);
+    $(host).insertAdjacentHTML('afterend', npmBadgeHtml);
   }
 
   async function generateSafeImageHTML(imgURL, alt) {
@@ -72,7 +76,7 @@
     return `<img data-canonical-src="${imgURL}" src=${dataURL} alt="${alt}">`;
   }
 
-  async function insertUnpublishedBadge() {
+  async function insertUnpublishedBadge(host) {
     const unpublished = `https://img.shields.io/badge/npm-unpublished-yellow`;
     const img = await generateSafeImageHTML(unpublished, 'not published yet');
 
@@ -87,7 +91,7 @@
       <a>`;
     }
 
-    $('.markdown-body h1').insertAdjacentHTML('afterend', html);
+    $(host).insertAdjacentHTML('afterend', html);
   }
 
   async function box(promise) {
@@ -97,6 +101,21 @@
       return [error]
     }
   }
+
+  async function ready(sentry) {
+    await sleep(10)
+    const timeout = 10 * 1000;
+    const interval = 200;
+    for (let i = 0; i < timeout / interval; i++) {
+      if ($(sentry)) { return [true, sentry] }
+
+      await sleep(interval);
+    }
+
+    return [false, sentry]
+  }
+
+  async function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)) }
 
   async function fetchDataURL(url) {
     const reader = new FileReader()
