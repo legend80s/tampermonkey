@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NPM Badge
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      1.0
 // @description  try to take over the world!
 // @author       You
 // @match        https://github.com/*/*
@@ -60,8 +60,19 @@
     </a>`;
 
     // $$('.markdown-body h1')[0].insertAdjacentHTML('afterend', `<img src="https://img.shields.io/npm/v/react.svg" alt="npm version" />`);
+    const hostNode = (await ready(host))[1];
 
-    $(host).insertAdjacentHTML('afterend', npmBadgeHtml);
+    if (queryChild($('.markdown-body'), 'img', (img) => { return img.dataset.canonicalSrc.includes('/npm/v/'); })) {
+      // data-canonical-src="https://img.shields.io/npm/v/verb-corpus.svg"
+
+      return;
+    }
+
+    hostNode.insertAdjacentHTML('afterend', npmBadgeHtml);
+  }
+
+  function queryChild(parent, selector, predicate) {
+    return [...parent.querySelectorAll(selector)].find(e => predicate(e))
   }
 
   async function generateSafeImageHTML(imgURL, alt) {
@@ -107,12 +118,12 @@
     const timeout = 10 * 1000;
     const interval = 200;
     for (let i = 0; i < timeout / interval; i++) {
-      if ($(sentry)) { return [true, sentry] }
+      if ($(sentry)) { return [true, $(sentry)] }
 
       await sleep(interval);
     }
 
-    return [false, sentry]
+    return [false, $(sentry)]
   }
 
   async function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)) }
