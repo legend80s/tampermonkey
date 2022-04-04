@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NPM Badge
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      3.1
 // @description  try to take over the world!
 // @author       You
 // @match        https://github.com/*/*
@@ -52,6 +52,10 @@
     // Refused to execute inline event handler because it violates the following Content Security Policy directive: "script-src 'unsafe-eval' github.githubassets.com"
     // document.head.insertAdjacentHTML('beforeend', `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-eval' *">`)
 
+    if (window.location.pathname.endsWith('package.json')) {
+      return injectIntoPackageJSON();
+    }
+
     const host = '.markdown-body h1';
 
     // Your code here...
@@ -68,21 +72,13 @@
     }
 
     const { name, description, version } = packageJSON;
-    const imgURL = `https://img.shields.io/npm/v/${name}?logo=npm`;
-    const link = `https://www.npmjs.com/package/${name}`;
-    const alt = `${name}@${version}: ${description}`;
 
-    const [err2, imgHTML] = await box(generateSafeImageHTML(imgURL, alt));
+    const npmLinkHTML = await composeNpmLinkHTML(name, { version, description })
 
-    if (err2) {
+    if (!npmLinkHTML) {
       return;
     }
 
-    const npmBadgeHtml = `<a href="${link}" rel="nofollow" target="_blank" alt="${alt}">
-      ${imgHTML}
-    </a>`;
-
-    // $$('.markdown-body h1')[0].insertAdjacentHTML('afterend', `<img src="https://img.shields.io/npm/v/react.svg" alt="npm version" />`);
     const hostNode = (await ready(host, { timeout: 3000 }))[1];
 
     if (!hostNode) { return; }
@@ -93,7 +89,58 @@
       return;
     }
 
-    hostNode.insertAdjacentHTML('afterend', npmBadgeHtml);
+    hostNode.insertAdjacentHTML('afterend', npmLinkHTML);
+  }
+
+  async function composeNpmLinkHTML(name, { version = '', description = '', style = '' } = {}) {
+    const imgURL = `https://img.shields.io/npm/v/${name}?logo=npm`;
+    const link = `https://www.npmjs.com/package/${name}`;
+    const alt = name + (version ? `@${version}` : '') + (description ? `: ${description}` : '');
+
+    const [err, badgeHTML] = await box(generateSafeImageHTML(imgURL, alt));
+
+    if (err) {
+      return '';
+    }
+
+    const npmLinkHTML = `<a href="${link}" rel="nofollow" target="_blank" alt="${alt}" style="${style}">
+      ${badgeHTML}
+    </a>`;
+
+    return npmLinkHTML;
+  }
+
+  function getPaireNodesByKeyName(name) {
+    const keyNode = $$('.js-blob-code-container .pl-ent').find(x => x.textContent === `"${name}"`);
+    const valueNode = keyNode.nextElementSibling;
+
+    return { keyNode, valueNode };
+  }
+
+  async function injectIntoPackageJSON() {
+    const { valueNode: nameNode } = getPaireNodesByKeyName('name');
+    const { keyNode: versionKeyNode } = getPaireNodesByKeyName('version');
+    const name = nameNode.textContent.replace(/^"/, '').replace(/"$/, '');
+
+    // const { valueNode: versionNode } = getPaireNodesByKeyName('version');
+    // const a = document.createElement('a');
+    // a.setAttribute('href', `https://www.npmjs.com/package/$ versionNode.textContent}`);
+    // a.textContent = versionNode.textContent;
+
+    const npmLinkHTML = await composeNpmLinkHTML(name, { style: 'left: 10.4em; display: inline-block; position: absolute; height: 100%; top: -20px;' });
+
+    const npmLinkElement = domStringToElement(npmLinkHTML);
+
+    versionKeyNode.parentElement.appendChild(npmLinkElement)
+    // versionNode.replaceWith(tpl.content)
+  }
+
+  function domStringToElement(str) {
+    const tpl = document.createElement('template');
+
+    tpl.innerHTML = str;
+
+    return tpl.content;
   }
 
   function queryChild(selector, predicate) {
