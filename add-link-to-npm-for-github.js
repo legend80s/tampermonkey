@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NPM Badge
 // @namespace    http://tampermonkey.net/
-// @version      3.1
+// @version      3.2
 // @description  try to take over the world!
 // @author       You
 // @match        https://github.com/*/*
@@ -21,6 +21,9 @@
   const label = `${appInfo}>`;
   const log = console.log.bind(console, label);
   const error = console.error.bind(console, label);
+
+  const host = '.markdown-body h1';
+  const position = 'beforeend';
 
   console.time(label + ' costs')
   await main()
@@ -56,8 +59,6 @@
       return injectIntoPackageJSON();
     }
 
-    const host = '.markdown-body h1';
-
     // Your code here...
     const path = await findPackageJSONRawPath();
     const [err1, packageJSON] = await box(fetch(path).then(resp => resp.json()));
@@ -89,7 +90,9 @@
       return;
     }
 
-    hostNode.insertAdjacentHTML('afterend', npmLinkHTML);
+    // hostNode.insertAdjacentHTML('afterend', );
+
+    insertBadge(npmLinkHTML);
   }
 
   async function composeNpmLinkHTML(name, { version = '', description = '', style = '' } = {}) {
@@ -174,7 +177,11 @@
       <a>`;
     }
 
-    $(host).insertAdjacentHTML('afterend', html);
+    insertBadge(html);
+  }
+
+  function insertBadge(html) {
+    $(host).insertAdjacentHTML(position, html);
   }
 
   async function box(promise) {
