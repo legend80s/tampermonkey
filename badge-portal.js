@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         NPM Badge
+// @name         BadgePortal
 // @namespace    http://tampermonkey.net/
-// @version      3.2
-// @description  try to take over the world!
+// @version      4.4.0
+// @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=github.com
@@ -22,7 +22,19 @@
   const log = console.log.bind(console, label);
   const error = console.error.bind(console, label);
 
-  const host = '.markdown-body h1';
+  async function findClosestHeader(container) {
+    await ready(container, { timeout: 3000 })
+
+    return findClosestHeaderCore(container);
+  }
+
+  function findClosestHeaderCore(container) {
+    return Array.from($(container).children).find(c => c.nodeName.startsWith('H'))
+  }
+
+  const container = '.markdown-body'
+  // const host = '.markdown-body h1';
+  const host = '#readme > .flex-justify-between';
   const position = 'beforeend';
 
   console.time(label + ' costs')
@@ -36,7 +48,7 @@
   // https://raw.githubusercontent.com/gcanti/newtype-ts/master/package.json
   function toRawPath(url) {
     return url.replace('github.com', 'raw.githubusercontent.com')
-      .replace('/blob/master/', '/master/')
+      .replace(/\/blob\/(master|main)\//, '/$1/')
   }
 
   async function findPackageJSONURL() {
@@ -62,55 +74,121 @@
     // Your code here...
     const path = await findPackageJSONRawPath();
     const [err1, packageJSON] = await box(fetch(path).then(resp => resp.json()));
+
     if (err1) {
       error(`fetch package.json failed: path = "${path}"`, err1);
 
-      if (!(await ready(host))[0]) { return; }
+      const hostNode = await findClosestHeader(container)
 
-      await insertUnpublishedBadge(host);
+      if (!hostNode) { error(`no h element find in "${container}"`); return; }
+
+      await insertUnpublishedBadge(hostNode);
 
       return;
     }
 
-    const { name, description, version } = packageJSON;
+    const { name, description, version, publisher } = packageJSON;
 
-    const npmLinkHTML = await composeNpmLinkHTML(name, { version, description })
+    const style = ''
+    const [existing, badgeLinkHTML] = await composeBadgeLinkHTML(name, { publisher, version, description, style });
 
-    if (!npmLinkHTML) {
+    if (existing) {
+      log(`version badge already exists`);
       return;
     }
 
-    const hostNode = (await ready(host, { timeout: 3000 }))[1];
+    if (!badgeLinkHTML) {
+      return;
+    }
+
+    // const hostNode = await findClosestHeader(container)
+    // if (!hostNode) { error(`no h element find in "${container}"`); return; }
+
+    const [_, hostNode] = await ready(host, { timeout: 3000 });
 
     if (!hostNode) { return; }
 
-    if (queryChild('.markdown-body img', (img) => { return img.dataset.canonicalSrc?.includes('/npm/v/'); })) {
-      // data-canonical-src="https://img.shields.io/npm/v/verb-corpus.svg"
-
-      return;
-    }
-
     // hostNode.insertAdjacentHTML('afterend', );
 
-    insertBadge(npmLinkHTML);
+    insertBadge(hostNode, badgeLinkHTML);
+  }
+
+  async function composeBadgeLinkHTML(name, { publisher = '', version = '', description = '', style = '' } = {}) {
+    if (isVSCodeExtensionRepo({ name, publisher })) {
+      return composeVSCodeMarketplaceLinkHTML(name, publisher, { version, description, style })
+    }
+
+    return composeNpmLinkHTML(name, { version, description, style });
+  }
+
+  async function composeVSCodeMarketplaceLinkHTML(name, publisher, { version = '', description = '', style = '' } = {}) {
+    if (isVersionBadgeExisting('/visual-studio-marketplace/v/')) { return [true, ''] }
+
+    const itemName = publisher + '.' + name
+    const link = `https://marketplace.visualstudio.com/items?itemName=${itemName}`;
+
+    // https://shields.io/ too large
+    // const logoUrl = 'https://marketplace.visualstudio.com/favicon.ico'
+    // const logoSlug = await url2base64(logoUrl);
+
+    // const logo = 'windows';
+    // const imgURL = `https://img.shields.io/badge/${publisher}-${name.replace(/-/g, '.')}-blue?logo=${logo}`;
+
+    const imgURL = `https://img.shields.io/visual-studio-marketplace/v/${itemName}.svg?color=blue&label=VS%20Code%20Marketplace&logo=visual-studio-code`
+
+    return [false, await composeBadgeLinkHTMLCore(link, imgURL, { name, version, description, style })];
+  }
+
+  async function url2base64(imgSrc) {
+    const [err, dataURL] = await box(fetchDataURL(imgSrc));
+
+    if (err) {
+      error(`[url2base64] fetchObjectURL failed for "${imgSrc}"`, err);
+
+      return '';
+    }
+
+    return dataURL;
+  }
+
+  /** @params {'/visual-studio-marketplace/v/' | '/npm/v/'} badgeTrace */
+  function isVersionBadgeExisting(badgeTrace) {
+    if (queryChild('#readme img', img => img.dataset.canonicalSrc?.includes(badgeTrace))) {
+      // data-canonical-src="https://img.shields.io/npm/v/verb-corpus.svg"
+
+      return true;
+    }
+
+    return false
   }
 
   async function composeNpmLinkHTML(name, { version = '', description = '', style = '' } = {}) {
-    const imgURL = `https://img.shields.io/npm/v/${name}?logo=npm`;
+    if (isVersionBadgeExisting('/npm/v/')) { return [true, ''] }
+
     const link = `https://www.npmjs.com/package/${name}`;
+    const imgURL = `https://img.shields.io/npm/v/${name}?logo=npm`;
+
+    return [false, await composeBadgeLinkHTMLCore(link, imgURL, { name, version, description, style })];
+  }
+
+  function isVSCodeExtensionRepo({ name, publisher }) {
+    return !!(name && publisher)
+  }
+
+  async function composeBadgeLinkHTMLCore(href, badgeSrc, { name, version = '', description = '', style = '' } = {}) {
     const alt = name + (version ? `@${version}` : '') + (description ? `: ${description}` : '');
 
-    const [err, badgeHTML] = await box(generateSafeImageHTML(imgURL, alt));
+    const [err, badgeHTML] = await box(generateSafeImageHTML(badgeSrc, alt));
 
     if (err) {
       return '';
     }
 
-    const npmLinkHTML = `<a href="${link}" rel="nofollow" target="_blank" alt="${alt}" style="${style}">
+    const badgeLinkHTML = `<a href="${href}" rel="nofollow" target="_blank" alt="${alt}" style="${style}">
       ${badgeHTML}
     </a>`;
 
-    return npmLinkHTML;
+    return badgeLinkHTML;
   }
 
   function getPaireNodesByKeyName(name) {
@@ -151,18 +229,16 @@
   }
 
   async function generateSafeImageHTML(imgURL, alt) {
-    const [err, dataURL] = await box(fetchDataURL(imgURL));
+    const dataURL = await url2base64(imgURL)
 
-    if (err) {
-      error('fetchObjectURL failed', err);
-
+    if (!dataURL) {
       return '';
     }
 
     return `<img data-canonical-src="${imgURL}" src=${dataURL} alt="${alt}">`;
   }
 
-  async function insertUnpublishedBadge(host) {
+  async function insertUnpublishedBadge(hostNode) {
     const unpublished = `https://img.shields.io/badge/npm-unpublished-yellow?logo=npm`;
     const img = await generateSafeImageHTML(unpublished, 'not published yet');
 
@@ -177,11 +253,11 @@
       <a>`;
     }
 
-    insertBadge(html);
+    insertBadge(hostNode, html);
   }
 
-  function insertBadge(html) {
-    $(host).insertAdjacentHTML(position, html);
+  function insertBadge(hostNode, html) {
+    hostNode.insertAdjacentHTML(position, html);
   }
 
   async function box(promise) {
