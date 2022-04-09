@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BadgePortal
 // @namespace    http://tampermonkey.net/
-// @version      4.4.0
+// @version      4.4.1
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -191,28 +191,34 @@
     return badgeLinkHTML;
   }
 
-  function getPaireNodesByKeyName(name) {
+  function getPairNodesByKeyName(name) {
     const keyNode = $$('.js-blob-code-container .pl-ent').find(x => x.textContent === `"${name}"`);
-    const valueNode = keyNode.nextElementSibling;
+    const valueNode = keyNode?.nextElementSibling;
 
     return { keyNode, valueNode };
   }
 
-  async function injectIntoPackageJSON() {
-    const { valueNode: nameNode } = getPaireNodesByKeyName('name');
-    const { keyNode: versionKeyNode } = getPaireNodesByKeyName('version');
-    const name = nameNode.textContent.replace(/^"/, '').replace(/"$/, '');
+  function getValueInPackageJSONByKey(key) {
+    const { valueNode } = getPairNodesByKeyName(key);
 
-    // const { valueNode: versionNode } = getPaireNodesByKeyName('version');
+    return valueNode?.textContent.replace(/^"/, '').replace(/"$/, '');
+  }
+
+  async function injectIntoPackageJSON() {
+    const name = getValueInPackageJSONByKey('name');
+    const publisher = getValueInPackageJSONByKey('publisher');
+
+    // const { valueNode: versionNode } = getPairNodesByKeyName('version');
     // const a = document.createElement('a');
     // a.setAttribute('href', `https://www.npmjs.com/package/$ versionNode.textContent}`);
     // a.textContent = versionNode.textContent;
 
-    const npmLinkHTML = await composeNpmLinkHTML(name, { style: 'left: 10.4em; display: inline-block; position: absolute; height: 100%; top: -20px;' });
+    const [_, badgeLinkHTML] = await composeBadgeLinkHTML(name, { publisher, style: 'left: 10.4em; display: inline-block; position: absolute; height: 100%; top: -20px;' });
 
-    const npmLinkElement = domStringToElement(npmLinkHTML);
+    const badgeLinkElement = domStringToElement(badgeLinkHTML);
+    const { keyNode: versionKeyNode } = getPairNodesByKeyName('version');
 
-    versionKeyNode.parentElement.appendChild(npmLinkElement)
+    versionKeyNode.parentElement.appendChild(badgeLinkElement)
     // versionNode.replaceWith(tpl.content)
   }
 
