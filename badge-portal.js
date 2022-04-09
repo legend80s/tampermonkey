@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BadgePortal
 // @namespace    http://tampermonkey.net/
-// @version      4.4.1
+// @version      4.4.2
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -78,9 +78,12 @@
     if (err1) {
       error(`fetch package.json failed: path = "${path}"`, err1);
 
-      const hostNode = await findClosestHeader(container)
+      // const hostNode = await findClosestHeader(container)
+      // if (!hostNode) { error(`no h element find in "${container}"`); return; }
 
-      if (!hostNode) { error(`no h element find in "${container}"`); return; }
+      const hostNode = await getEnsuredHostNode();
+
+      if (!hostNode) { return }
 
       await insertUnpublishedBadge(hostNode);
 
@@ -104,13 +107,19 @@
     // const hostNode = await findClosestHeader(container)
     // if (!hostNode) { error(`no h element find in "${container}"`); return; }
 
-    const [_, hostNode] = await ready(host, { timeout: 3000 });
+    const hostNode = getEnsuredHostNode();
 
     if (!hostNode) { return; }
 
     // hostNode.insertAdjacentHTML('afterend', );
 
     insertBadge(hostNode, badgeLinkHTML);
+  }
+
+  async function getEnsuredHostNode() {
+    const [_, hostNode] = await ready(host, { timeout: 3000 });
+
+    return hostNode;
   }
 
   async function composeBadgeLinkHTML(name, { publisher = '', version = '', description = '', style = '' } = {}) {
@@ -256,7 +265,7 @@
       const link = `https://www.npmjs.com/package/${name}`;
       html = `<a href="${link}" rel="nofollow" target="_blank" alt="${name}">
         ${img}
-      <a>`;
+      </a>`;
     }
 
     insertBadge(hostNode, html);
