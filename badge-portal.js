@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BadgePortal
 // @namespace    http://tampermonkey.net/
-// @version      4.4.3
+// @version      4.4.4
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -82,8 +82,11 @@
 
     if (!hostNode) { return }
 
-    if (err1) {
-      error(`fetch package.json failed: path = "${path}"`, err1);
+    const { name: pname } = packageJSON;
+
+    if (err1 || !pname) {
+      err1 && error(`fetch package.json failed: path = "${path}"`, err1);
+      !pname && error(`no "name" field in package.json`, { path, packageJSON });
 
       // const hostNode = await findClosestHeader(container)
       // if (!hostNode) { error(`no h element find in "${container}"`); return; }
