@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BadgePortal
 // @namespace    http://tampermonkey.net/
-// @version      4.4.2
+// @version      4.4.3
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -75,24 +75,26 @@
     const path = await findPackageJSONRawPath();
     const [err1, packageJSON] = await box(fetch(path).then(resp => resp.json()));
 
+    const [hostNode, over1Children] = await getEnsuredHostNode();
+    const style = over1Children ? `margin-right: 1rem;` : '';
+
+    // log('hostNode', hostNode)
+
+    if (!hostNode) { return }
+
     if (err1) {
       error(`fetch package.json failed: path = "${path}"`, err1);
 
       // const hostNode = await findClosestHeader(container)
       // if (!hostNode) { error(`no h element find in "${container}"`); return; }
 
-      const hostNode = await getEnsuredHostNode();
-
-      if (!hostNode) { return }
-
-      await insertUnpublishedBadge(hostNode);
+      await insertUnpublishedBadge(hostNode, { style });
 
       return;
     }
 
     const { name, description, version, publisher } = packageJSON;
 
-    const style = ''
     const [existing, badgeLinkHTML] = await composeBadgeLinkHTML(name, { publisher, version, description, style });
 
     if (existing) {
@@ -101,13 +103,12 @@
     }
 
     if (!badgeLinkHTML) {
+      error('[composeBadgeLinkHTML] return empty badgeLinkHTML', badgeLinkHTML)
       return;
     }
 
     // const hostNode = await findClosestHeader(container)
     // if (!hostNode) { error(`no h element find in "${container}"`); return; }
-
-    const hostNode = getEnsuredHostNode();
 
     if (!hostNode) { return; }
 
@@ -116,10 +117,18 @@
     insertBadge(hostNode, badgeLinkHTML);
   }
 
+  function hasMoreThanOneChildren(hostNode) {
+    return hostNode?.childElementCount > 1
+  }
+
   async function getEnsuredHostNode() {
     const [_, hostNode] = await ready(host, { timeout: 3000 });
 
-    return hostNode;
+    if (hasMoreThanOneChildren(hostNode)) {
+      return [hostNode.lastElementChild, true]
+    }
+
+    return [hostNode, false];
   }
 
   async function composeBadgeLinkHTML(name, { publisher = '', version = '', description = '', style = '' } = {}) {
@@ -190,6 +199,7 @@
     const [err, badgeHTML] = await box(generateSafeImageHTML(badgeSrc, alt));
 
     if (err) {
+      // error('[composeBadgeLinkHTMLCore] failed', err)
       return '';
     }
 
@@ -253,7 +263,7 @@
     return `<img data-canonical-src="${imgURL}" src=${dataURL} alt="${alt}">`;
   }
 
-  async function insertUnpublishedBadge(hostNode) {
+  async function insertUnpublishedBadge(hostNode, { style }) {
     const unpublished = `https://img.shields.io/badge/npm-unpublished-yellow?logo=npm`;
     const img = await generateSafeImageHTML(unpublished, 'not published yet');
 
@@ -263,7 +273,9 @@
 
     if (name) {
       const link = `https://www.npmjs.com/package/${name}`;
-      html = `<a href="${link}" rel="nofollow" target="_blank" alt="${name}">
+      const styleWrapper = style ? `style="${style}"` : ''
+
+      html = `<a href="${link}" rel="nofollow" target="_blank" alt="${name}" ${styleWrapper}>
         ${img}
       </a>`;
     }
