@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.6.1
+// @version      1.7.1
 // @description  try to take over the world!
 // @author       孟陬
 // @match        http://*/*
@@ -47,6 +47,11 @@
     extractVersion,
     createLogger,
     generateLabel,
+
+    makeItHappenGlobally,
+    insertScript,
+    isValidURL,
+    diff,
   };
 
   if (!window.tampermonkeyUtils) {
@@ -75,6 +80,16 @@
     return diff;
   }
 
+  function wrapInIIFE(text) {
+    return \`(() => { \${text} })()\`
+  }
+
+  function makeItHappenGlobally(scriptText, GM_addElement) {
+    GM_addElement('script', {
+      textContent: wrapInIIFE(scriptText),
+    });
+  }
+
   function generateLabel(GM_info) {
     const { name, version } = GM_info.script;
     const label = name + '@' + version + '>';
@@ -95,13 +110,28 @@
         return console[level].bind(console, label);
     }
 
+    function diff(arr1, arr2) {
+      return arr1.filter(item => !arr2.includes(item));
+    }
+
+    function isValidURL(str) { return /^(?:https?:)?\\/\\/.+/.test(str) }
+
+    function insertScript(src, GM_addElement) {
+      if (!isValidURL(src)) {
+        return error('[insertScript] \`src\` required and expected to be a valid url, but got', src);
+      }
+
+      return GM_addElement('script', {
+        src,
+        type: 'text/javascript'
+      });
+    }
+
   /**
  * @param {string} readySentry
  * @returns {Promise<[boolean, HTMLElement]>}
  */
-  async function ready(readySentry) {
-    const timeout = 10 * 1000;
-    const interval = 500;
+  async function ready(readySentry, { timeout = 10 * 1000, interval = 500 } = {}) {
     const iterations = timeout / interval;
 
       await sleep(20);
