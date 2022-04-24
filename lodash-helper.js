@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Lodash Helper
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      2.0
 // @description  try to take over the world!
 // @author       You
 // @match        https://lodash.com/docs/*
@@ -29,17 +29,18 @@
   // console.log(`$('#carbonads') after`, $('#carbonads'))
 
   const scriptContent = `
-  function merge(target, src, postfix = '__from_lodash') {
+  function merge(target, src, { prefix = 'lodash__', postfix = '' } = {}) {
     const keys = Object.keys(src);
     const total = keys.length;
     const result = { total, conflicted: 0, merged: 0 }
 
     keys.forEach((key) => {
-      const newKey = key + postfix;
+      const newKey = \`\${prefix}\${key}\${postfix}\`;
+      // console.log('newKey', newKey)
 
       if (target[newKey] !== undefined) {
         result.conflicted += 1;
-        error('Merge Conflicts: key exists in target object. key=', newKey, 'value=', target[key]);
+        console.error('Merge Conflicts: key exists in target object. key=', newKey, 'value=', target[key]);
       } else {
         target[newKey] = src[key];
       }
