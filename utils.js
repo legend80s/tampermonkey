@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.7.1
+// @version      1.8.1
 // @description  try to take over the world!
 // @author       孟陬
 // @match        http://*/*
@@ -128,16 +128,16 @@
     }
 
   /**
- * @param {string} readySentry
+ * @param {string|() => boolean} readySentry
  * @returns {Promise<[boolean, HTMLElement]>}
  */
   async function ready(readySentry, { timeout = 10 * 1000, interval = 500 } = {}) {
     const iterations = timeout / interval;
 
-      await sleep(20);
+    await sleep(20);
 
     for (let index = 0; index < iterations; index++) {
-      const readySentryElement = $(readySentry);
+      const readySentryElement = typeof readySentry === 'function' ? readySentry() : $(readySentry);
 
       if (readySentryElement) {
         return [true, readySentryElement];
