@@ -1,19 +1,24 @@
 // ==UserScript==
-// @name         BadgePortal
+// @name         GitHubHelper
 // @namespace    http://tampermonkey.net/
-// @version      4.4.4
+// @version      5.0.0
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=github.com
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
+// @grant        GM_addElement
+// @grant        GM_setClipboard
 // ==/UserScript==
+
+// 4.4.4 BadgePortal
+// 5.0.0 compile TS - copy to TS
 
 (async function() {
   'use strict';
-  const $$ = (s) => Array.from(document.querySelectorAll(s));
-  const $ = (s) => document.querySelector(s);
+
+  const { $$, $, insertScript, ready } = tampermonkeyUtils;
 
   const { name: scriptName, version: scriptVersion } = GM_info.script;
 
@@ -39,7 +44,87 @@
 
   console.time(label + ' costs')
   await main()
+
   console.timeEnd(label + ' costs')
+
+  async function main() {
+    if (isSourceCodePage('ts')) {
+      return await compile()
+    }
+
+    await badge();
+  }
+
+  function isSourceCodePage(type) {
+    return location.pathname.endsWith('.' + type);
+  }
+
+  async function compile() {
+    const id = 'cp-2-ts';
+
+    // console.time('insertCopy2TSBtn')
+    await insertCopy2TSBtn(id);
+    // console.timeEnd('insertCopy2TSBtn')
+
+    $('#'+id).addEventListener('click', async () => {
+      // console.time('installTSCompiler')
+      const ts = await installTSCompiler(id);
+      // console.timeEnd('installTSCompiler')
+
+      const sourceCode = $('.Box-body.type-typescript').innerText;
+      const { outputText: js } = ts.transpileModule(sourceCode, { compilerOptions: { target: 'esnext' } });
+
+      // log('sourceCode', sourceCode)
+      // log('js', js)
+
+      GM_setClipboard(js);
+    })
+  }
+
+  installTSCompiler.tsPromise = null;
+
+  async function installTSCompiler() {
+    if (installTSCompiler.tsPromise) {
+      console.log('hit')
+      return installTSCompiler.tsPromise;
+    }
+
+    console.log('not hit')
+
+    return installTSCompiler.tsPromise = (async () => {
+      insertScript(`https://cdn.jsdelivr.net/npm/typescript@4.6.3/lib/typescriptServices.js`, GM_addElement);
+
+      await ready(() => typeof ts !== 'undefined', { timeout: 10 * 1000 });
+
+      log(`ts@${ts.version} installed in your console.`)
+
+      return ts;
+    })();
+  }
+
+  async function insertCopy2TSBtn(id) {
+    const html = `
+    <div id="${id}" class="d-inline-block btn-octicon cursor-pointer" style="height: 26px">
+    <span class="tooltipped tooltipped-nw" aria-label="Copy TS as JS">
+      <span>
+        <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" class="octicon octicon-copy">
+          <path fill-rule="evenodd"
+            d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z">
+          </path>
+          <path fill-rule="evenodd"
+            d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z">
+          </path>
+        </svg>
+      </span>
+      JS
+    </span>
+  </div>
+    `
+
+    $('.Box-header remote-clipboard-copy.btn-octicon').insertAdjacentHTML('beforebegin', html);
+
+    return await ready('#'+id);
+  }
 
   // https://github.com/sveltejs/kit/blob/master/packages/kit/package.json =>
   // https://raw.githubusercontent.com/sveltejs/kit/master/packages/kit/package.json
@@ -63,7 +148,7 @@
     return toRawPath(await findPackageJSONURL());
   }
 
-  async function main() {
+  async function badge() {
     // Refused to execute inline event handler because it violates the following Content Security Policy directive: "script-src 'unsafe-eval' github.githubassets.com"
     // document.head.insertAdjacentHTML('beforeend', `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-eval' *">`)
 
@@ -297,22 +382,6 @@
       return [error]
     }
   }
-
-  async function ready(sentry, { timeout = 10 * 1000, interval = 200 } = {}) {
-    await sleep(10)
-
-    for (let i = 0; i < timeout / interval; i++) {
-      if ($(sentry)) { return [true, $(sentry)] }
-
-      await sleep(interval);
-    }
-
-    error(`element "${sentry}" not found after ${timeout / 1000}s!`)
-
-    return [false, $(sentry)]
-  }
-
-  async function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)) }
 
   async function fetchDataURL(url) {
     const reader = new FileReader()
