@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHubHelper
 // @namespace    http://tampermonkey.net/
-// @version      5.0.2
+// @version      5.1.0
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -13,7 +13,7 @@
 
 
 // CHANGELOG
-// 5.0.2 修复同名 npm 包
+// 5.1.0 提示同名 npm 包
 // 5.0.0 compile TS - copy to TS
 // 4.4.4 BadgePortal
 
@@ -175,30 +175,54 @@
 
     const { name: pname } = packageJSON;
 
-    const registryResp = await requestJson(`https://registry.npmjs.org/${pname}`);
+    const registryResp = await requestJson(`https://registry.npmjs.org/${pname}`, { debugging: false });
 
-    // log('registryResp', registryResp.repository)
+    const { name: npmName } = registryResp;
 
-    const { repository: { url } } = registryResp;
-
-    const registryRepoId = url.replace(/\.git$/, '').split('/').slice(-2).join('/')
-
-    if (err1 || !pname || registryRepoId !== getRepoId()) {
+    if (err1 || !pname || !npmName) {
       let text;
 
       if (err1) error(`fetch package.json failed: path = "${path}"`, err1);
       else if (!pname) error(`no "name" field in package.json`, { path, packageJSON });
       else {
-        error(`not a same repo with its couterpart in npm`, { 'repository.url': url });
-        text = '名字已被注册'
+        error(`no package named "${pname}" published to npm`, registryResp);
       }
 
       // const hostNode = await findClosestHeader(container)
       // if (!hostNode) { error(`no h element find in "${container}"`); return; }
 
-      await insertUnpublishedBadge(hostNode, { style, text });
+      await insertUnpublishedBadge(hostNode, { style });
 
       return;
+    }
+
+    const { repository } = registryResp
+
+    // log('registry.repository', repository)
+
+    const { url } = repository;
+
+    const repoUrl = gitScheme2Url(url);
+
+    const registryRepoId = repoUrl.split('/').slice(-2).join('/')
+
+    if (registryRepoId !== getRepoId()) {
+      error(`名字已被注册`, repoUrl);
+      const text = '名字已被注册'
+
+      return await insertUnpublishedBadge(hostNode, { style, text });
+    }
+
+    // git+https://github.com/OptimalBits/dolphin.git => https://github.com/OptimalBits/dolphin
+    function gitScheme2Url(scheme) {
+      return remove(
+        remove(scheme, /^git\+/),
+        /\.git$/
+      )
+    }
+
+    function remove(text, regexp) {
+      return text.replace(regexp, '')
     }
 
     const { name, description, version, publisher } = packageJSON;
@@ -429,6 +453,7 @@
         url,
         onload: (result) => {
           debugging && log('result', result);
+          debugging && log('responseText', result.responseText);
 
           try {
             resolve(JSON.parse(result.responseText))
