@@ -1,19 +1,21 @@
 // ==UserScript==
 // @name         GitHubHelper
 // @namespace    http://tampermonkey.net/
-// @version      5.0.1
+// @version      5.0.2
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=github.com
-// @grant        GM_info
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addElement
 // @grant        GM_setClipboard
 // ==/UserScript==
 
-// 4.4.4 BadgePortal
+
+// CHANGELOG
+// 5.0.2 修复同名 npm 包
 // 5.0.0 compile TS - copy to TS
+// 4.4.4 BadgePortal
 
 (async function() {
   'use strict';
@@ -148,6 +150,10 @@
     return toRawPath(await findPackageJSONURL());
   }
 
+  function getRepoId() {
+    return location.pathname.split('/').slice(1, 3).join('/');
+  }
+
   async function badge() {
     // Refused to execute inline event handler because it violates the following Content Security Policy directive: "script-src 'unsafe-eval' github.githubassets.com"
     // document.head.insertAdjacentHTML('beforeend', `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-eval' *">`)
@@ -169,14 +175,28 @@
 
     const { name: pname } = packageJSON;
 
-    if (err1 || !pname) {
-      err1 && error(`fetch package.json failed: path = "${path}"`, err1);
-      !pname && error(`no "name" field in package.json`, { path, packageJSON });
+    const registryResp = await requestJson(`https://registry.npmjs.org/${pname}`);
+
+    // log('registryResp', registryResp.repository)
+
+    const { repository: { url } } = registryResp;
+
+    const registryRepoId = url.replace(/\.git$/, '').split('/').slice(-2).join('/')
+
+    if (err1 || !pname || registryRepoId !== getRepoId()) {
+      let text;
+
+      if (err1) error(`fetch package.json failed: path = "${path}"`, err1);
+      else if (!pname) error(`no "name" field in package.json`, { path, packageJSON });
+      else {
+        error(`not a same repo with its couterpart in npm`, { 'repository.url': url });
+        text = '名字已被注册'
+      }
 
       // const hostNode = await findClosestHeader(container)
       // if (!hostNode) { error(`no h element find in "${container}"`); return; }
 
-      await insertUnpublishedBadge(hostNode, { style });
+      await insertUnpublishedBadge(hostNode, { style, text });
 
       return;
     }
@@ -351,8 +371,8 @@
     return `<img data-canonical-src="${imgURL}" src=${dataURL} alt="${alt}">`;
   }
 
-  async function insertUnpublishedBadge(hostNode, { style }) {
-    const unpublished = `https://img.shields.io/badge/npm-unpublished-yellow?logo=npm`;
+  async function insertUnpublishedBadge(hostNode, { style, text = 'unpublished' }) {
+    const unpublished = `https://img.shields.io/badge/npm-${text}-yellow?logo=npm`;
     const img = await generateSafeImageHTML(unpublished, 'not published yet');
 
     const name = $('.markdown-body h1').textContent.trim()
@@ -399,6 +419,32 @@
         reject(event)
       });
     })
+  }
+
+  function requestJson(url, { debugging = false } = {}) {
+    debugging && log('url', url)
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url,
+        onload: (result) => {
+          debugging && log('result', result);
+
+          try {
+            resolve(JSON.parse(result.responseText))
+          } catch(err) {
+            debugging && error('JSON.parse', error)
+
+            reject(err)
+          }
+        },
+        onerror: (error) => {
+          debugging && error('onerror', error)
+
+          reject(error)
+        }
+      });
+    });
   }
 
   function requestBlob(url) {
