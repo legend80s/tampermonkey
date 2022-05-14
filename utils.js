@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.11.1
+// @version      1.13
 // @description  try to take over the world!
 // @author       孟陬
 // @match        http://*/*
@@ -13,6 +13,8 @@
 
 // ==/UserScript==
 
+// 1.13 add `time2Readable` `seconds`
+// 1.12.0 add utils `createLoggers`
 // 1.11.0 发布 url 变化事件
 // 1.10.0 find what javascript variables are leaking into the global scope
 // 1.9.0 install package in your console
@@ -49,11 +51,15 @@
     assertUniqueness,
     extractVersion,
     createLogger,
+    createLoggers,
     generateLabel,
     makeItHappenGlobally,
     insertScript,
     isValidURL,
     diff,
+
+    time2Readable,
+    seconds,
 
     requestPackageJson: ${requestPackageJson.toString()},
     findVariablesLeakingIntoGlobalScope: ${findVariablesLeakingIntoGlobalScope.toString()},
@@ -101,6 +107,52 @@
     const label = name + '@' + version + '>';
     return label;
   }
+
+  function time2Readable(begin, end) {
+    const duration = end - begin;
+
+    const seconds = duration / 1000
+    const min = seconds / 60;
+
+    const text = min >= 1 ? minutes2Readable(min) : \`\${seconds} 秒\`;
+
+    return text;
+  }
+
+  /**
+   *
+   * @param {number} min
+   * @returns {string}
+   */
+  function minutes2Readable(minutes) {
+    const integer = Math.floor(minutes);
+    const fractional = minutes - integer;
+    const minText = integer + '分' + (fractional * 60).toFixed(0) + '秒';
+
+    return minText;
+  }
+
+  function seconds(n) { return n * 1000 }
+
+  function createLoggers(GM_info) {
+    const label = generateLabel(GM_info);
+
+    const levels = ['log', 'info', 'warn', 'error']
+
+    return levels.reduce((acc, level) => {
+      return {
+        ...acc,
+
+        [level]: (...args) => {
+          const date = new Date
+          const time = [date.getHours(), date.getMinutes(), date.getSeconds()].map(n => String(n).padStart(2, '0')).join(':')
+
+          return console[level](label, \`[\${time}]\`, ...args)
+        }
+      }
+    }, {})
+  }
+
   function createLogger(level = 'log', GM_info) {
         // console.log('in createLogger', GM_info)
         const label = generateLabel(GM_info);
@@ -127,7 +179,7 @@
  * @param {string|() => boolean} readySentry
  * @returns {Promise<[boolean, HTMLElement]>}
  */
-  async function ready(readySentry, { timeout = 10 * 1000, interval = 500 } = {}) {
+  async function ready(readySentry, { timeout = 5 * 1000, interval = 500 } = {}) {
     const iterations = timeout / interval;
     await sleep(20);
     for (let index = 0; index < iterations; index++) {
@@ -266,14 +318,14 @@
     }
   }
 
-  function findElementsByText(text, selector, { exact = true } = {}) {
+  function findElementsByText(text, selector) {
     const { ___error: error, $$ } = window.tampermonkeyUtils;
 
     if (!text || !selector) { error(`[invalid params] text and selector required`); return [] }
 
-    // *hello ^hello hello$
+    const predict = text instanceof RegExp ? content => text.test(content) : content => text === content;
 
-    return $$(selector).filter(e => e.textContent.trim() === text);
+    return $$(selector).filter(e => predict(e.textContent.trim()));
   }
 
   function merge(target, src, { prefix = 'lodash__', postfix = '' } = {}) {
