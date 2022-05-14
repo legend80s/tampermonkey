@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHubHelper
 // @namespace    http://tampermonkey.net/
-// @version      5.1.0
+// @version      5.1.1
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -191,16 +191,16 @@
       // const hostNode = await findClosestHeader(container)
       // if (!hostNode) { error(`no h element find in "${container}"`); return; }
 
-      await insertUnpublishedBadge(hostNode, { style });
+      await insertUnpublishedBadge(hostNode, { name: pname, style });
 
       return;
     }
 
-    const { repository } = registryResp
+    const { repository = {} } = registryResp
 
-    // log('registry.repository', repository)
+    // log('registry.repository', repository || registryResp)
 
-    const { url } = repository;
+    const { url = '' } = repository;
 
     const repoUrl = gitScheme2Url(url);
 
@@ -210,7 +210,7 @@
       error(`名字已被注册`, repoUrl);
       const text = '名字已被注册'
 
-      return await insertUnpublishedBadge(hostNode, { style, text });
+      return await insertUnpublishedBadge(hostNode, { name: pname, style, text });
     }
 
     // git+https://github.com/OptimalBits/dolphin.git => https://github.com/OptimalBits/dolphin
@@ -395,11 +395,11 @@
     return `<img data-canonical-src="${imgURL}" src=${dataURL} alt="${alt}">`;
   }
 
-  async function insertUnpublishedBadge(hostNode, { style, text = 'unpublished' }) {
+  async function insertUnpublishedBadge(hostNode, { name, style, text = 'unpublished' }) {
     const unpublished = `https://img.shields.io/badge/npm-${text}-yellow?logo=npm`;
     const img = await generateSafeImageHTML(unpublished, 'not published yet');
 
-    const name = $('.markdown-body h1').textContent.trim()
+    // const name = $('.markdown-body h1').textContent.trim()
 
     let html = img;
 
