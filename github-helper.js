@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHubHelper
 // @namespace    http://tampermonkey.net/
-// @version      5.0.0
+// @version      5.0.1
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -158,7 +158,7 @@
 
     // Your code here...
     const path = await findPackageJSONRawPath();
-    const [err1, packageJSON] = await box(fetch(path).then(resp => resp.json()));
+    const [err1, packageJSON = {}] = await box(fetch(path).then(resp => resp.json()));
 
     const [hostNode, over1Children] = await getEnsuredHostNode();
     const style = over1Children ? `margin-right: 1rem;` : '';
