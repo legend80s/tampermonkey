@@ -173,13 +173,18 @@
 
     if (!hostNode) { return }
 
-    const { name: pname } = packageJSON;
+    const { name: pname, publisher, private: prvt } = packageJSON;
+    // log('prvt', prvt)
+
+    if (prvt) {
+      return await insertUnpublishedBadge(hostNode, { name: pname, style, text: 'private' });
+    }
 
     const registryResp = await requestJson(`https://registry.npmjs.org/${pname}`, { debugging: false });
 
     const { name: npmName } = registryResp;
 
-    if (err1 || !pname || !npmName) {
+    if (err1 || !pname || (!publisher && !npmName)) {
       let text;
 
       if (err1) error(`fetch package.json failed: path = "${path}"`, err1);
@@ -206,26 +211,14 @@
 
     const registryRepoId = repoUrl.split('/').slice(-2).join('/')
 
-    if (registryRepoId !== getRepoId()) {
+    if (registryRepoId && registryRepoId !== getRepoId()) {
       error(`名字已被注册`, repoUrl);
       const text = '名字已被注册'
 
       return await insertUnpublishedBadge(hostNode, { name: pname, style, text });
     }
 
-    // git+https://github.com/OptimalBits/dolphin.git => https://github.com/OptimalBits/dolphin
-    function gitScheme2Url(scheme) {
-      return remove(
-        remove(scheme, /^git\+/),
-        /\.git$/
-      )
-    }
-
-    function remove(text, regexp) {
-      return text.replace(regexp, '')
-    }
-
-    const { name, description, version, publisher } = packageJSON;
+    const { name, description, version } = packageJSON;
 
     const [existing, badgeLinkHTML] = await composeBadgeLinkHTML(name, { publisher, version, description, style });
 
@@ -272,7 +265,7 @@
   }
 
   async function composeVSCodeMarketplaceLinkHTML(name, publisher, { version = '', description = '', style = '' } = {}) {
-    if (isVersionBadgeExisting('/visual-studio-marketplace/v/')) { return [true, ''] }
+    if (isVersionBadgeExisting(name)) { return [true, ''] }
 
     const itemName = publisher + '.' + name
     const link = `https://marketplace.visualstudio.com/items?itemName=${itemName}`;
@@ -301,9 +294,8 @@
     return dataURL;
   }
 
-  /** @params {'/visual-studio-marketplace/v/' | '/npm/v/'} badgeTrace */
-  function isVersionBadgeExisting(badgeTrace) {
-    if (queryChild('#readme img', img => img.dataset.canonicalSrc?.includes(badgeTrace))) {
+  function isVersionBadgeExisting(name) {
+    if ($(`#${genId({ name })}`)) {
       // data-canonical-src="https://img.shields.io/npm/v/verb-corpus.svg"
 
       return true;
@@ -313,7 +305,7 @@
   }
 
   async function composeNpmLinkHTML(name, { version = '', description = '', style = '' } = {}) {
-    if (isVersionBadgeExisting('/npm/v/')) { return [true, ''] }
+    if (isVersionBadgeExisting(name)) { return [true, ''] }
 
     const link = `https://www.npmjs.com/package/${name}`;
     const imgURL = `https://img.shields.io/npm/v/${name}?logo=npm`;
@@ -325,6 +317,8 @@
     return !!(name && publisher)
   }
 
+  function genId({ name }) { return `github-helper-${name}` }
+
   async function composeBadgeLinkHTMLCore(href, badgeSrc, { name, version = '', description = '', style = '' } = {}) {
     const alt = name + (version ? `@${version}` : '') + (description ? `: ${description}` : '');
 
@@ -335,7 +329,7 @@
       return '';
     }
 
-    const badgeLinkHTML = `<a href="${href}" rel="nofollow" target="_blank" alt="${alt}" style="${style}">
+    const badgeLinkHTML = `<a href="${href}" id="${genId({ name })}" rel="nofollow" target="_blank" alt="${alt}" style="${style}">
       ${badgeHTML}
     </a>`;
 
@@ -470,6 +464,18 @@
         }
       });
     });
+  }
+
+  // git+https://github.com/OptimalBits/dolphin.git => https://github.com/OptimalBits/dolphin
+  function gitScheme2Url(scheme) {
+    return remove(
+      remove(scheme, /^git\+/),
+      /\.git$/
+    )
+  }
+
+  function remove(text, regexp) {
+    return text.replace(regexp, '')
   }
 
   function requestBlob(url) {
