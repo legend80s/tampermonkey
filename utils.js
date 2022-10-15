@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.13
+// @version      1.18
 // @description  try to take over the world!
 // @author       孟陬
 // @match        http://*/*
@@ -13,6 +13,9 @@
 
 // ==/UserScript==
 
+// CHANGELOG
+// 1.15 add withTime
+// 1.14 add toKebabCase createStyle
 // 1.13 add `time2Readable` `seconds`
 // 1.12.0 add utils `createLoggers`
 // 1.11.0 发布 url 变化事件
@@ -30,8 +33,8 @@
   const scriptContent = `
   const appName = '${appName}';
   const label = '${label}';
-  const error = console.error.bind(console, label);
-  const log = console.log.bind(console, label);
+  const error = (...args) => console.error(label, now(), ...args);
+  const log = (...args) => console.log(label, now(), ...args);
   const $ = (selector) => document.querySelector(selector);
   const $$ = selectors => [...document.querySelectorAll(selectors)];
   const tampermonkeyUtils = {
@@ -44,6 +47,7 @@
     wait: sleep,
     delay: sleep,
     toast,
+    fire,
     alert,
     confirm,
     ready,
@@ -53,6 +57,7 @@
     createLogger,
     createLoggers,
     generateLabel,
+    generateAppName,
     makeItHappenGlobally,
     insertScript,
     isValidURL,
@@ -60,6 +65,10 @@
 
     time2Readable,
     seconds,
+
+    createStyle,
+    toKebabCase,
+    withTime,
 
     requestPackageJson: ${requestPackageJson.toString()},
     findVariablesLeakingIntoGlobalScope: ${findVariablesLeakingIntoGlobalScope.toString()},
@@ -71,13 +80,14 @@
     merge: ${merge.toString()},
     findElementsByText: ${findElementsByText.toString()},
     getElementsByText: ${findElementsByText.toString()},
+    toLink: ${toLink.toString()},
 
     onUrlChange: ${onUrlChange.toString()},
   };
 
   if (!window.tampermonkeyUtils) {
       window.tampermonkeyUtils = tampermonkeyUtils;
-      log('已注入 window.tampermonkeyUtils', window.tampermonkeyUtils, Date.now())
+      log('已注入 window.tampermonkeyUtils', window.tampermonkeyUtils)
   } else {
       Object.assign(window.tampermonkeyUtils, tampermonkeyUtils)
       error('window.tampermonkeyUtils 已存在，仍然会注入', window.tampermonkeyUtils)
@@ -102,10 +112,58 @@
       textContent: wrapInIIFE(scriptText),
     });
   }
+
   function generateLabel(GM_info) {
     const { name, version } = GM_info.script;
     const label = name + '@' + version + '>';
     return label;
+  }
+
+  function generateAppName(GM_info, { withVersion = true } = {}) {
+    const { name, version } = GM_info.script;
+
+    if (withVersion) {
+      return name + '@' + version;
+    }
+
+    return name
+  }
+
+  function withTime(func) {
+    return async (...args) => {
+      const start = Date.now();
+
+      try {
+        await func(...args);
+      } finally {
+        log('🎉 耗时', time2Readable(start, Date.now))
+      }
+    }
+  }
+
+  /**
+   * @public
+   * @param {import("react").CSSProperties} params
+   */
+  function createStyle(params) {
+    return Object.keys(params)
+      .map((key) => {
+      const rule = params[key];
+
+      return toKebabCase(key) + ': ' + rule
+    }, '')
+      .join('; ')
+  }
+
+  /**
+   * @public
+   * @param {string} key
+   * @returns {string}
+   */
+  function toKebabCase(key) {
+    return key
+      .replace(/([A-Z])/g, (_, m1) => \`-\$\{m1.toLowerCase()}\`)
+      .replace(/^-/, '')
   }
 
   function time2Readable(begin, end) {
@@ -144,13 +202,19 @@
         ...acc,
 
         [level]: (...args) => {
-          const date = new Date
-          const time = [date.getHours(), date.getMinutes(), date.getSeconds()].map(n => String(n).padStart(2, '0')).join(':')
+          const time = now()
 
-          return console[level](label, \`[\${time}]\`, ...args)
+          return console[level](label, time, ...args)
         }
       }
     }, {})
+  }
+
+  function now() {
+    const date = new Date();
+    const time = [date.getHours(), date.getMinutes(), date.getSeconds()].map(n => String(n).padStart(2, '0')).join(':')
+
+    return \`[\${time}]\`;
   }
 
   function createLogger(level = 'log', GM_info) {
@@ -175,13 +239,35 @@
         type: 'text/javascript'
       });
     }
+
   /**
- * @param {string|() => boolean} readySentry
- * @returns {Promise<[boolean, HTMLElement]>}
- */
-  async function ready(readySentry, { timeout = 5 * 1000, interval = 500 } = {}) {
+   * @param {string|() => boolean} readySentry
+   * @returns {Promise<[boolean, HTMLElement]>}
+   */
+  async function ready(readySentry, options = {}) {
+    const { verbose = false } = options;
+
+    if (!verbose) { return await readyCore(readySentry, options) }
+
+    const label = \`插件通用 utils> readySentry "\${readySentry}" ready costs:\`
+
+    console.time(label);
+
+    try {
+      return await readyCore(readySentry, options)
+    } finally {
+      console.timeEnd(label);
+    }
+  }
+
+  /**
+   * @param {string|() => boolean} readySentry
+   * @returns {Promise<[boolean, HTMLElement]>}
+   */
+  async function readyCore(readySentry, { timeout = 5 * 1000, interval = 500 } = {}) {
     const iterations = timeout / interval;
     await sleep(20);
+
     for (let index = 0; index < iterations; index++) {
       const readySentryElement = typeof readySentry === 'function' ? readySentry() : $(readySentry);
       if (readySentryElement) {
@@ -198,7 +284,12 @@
       }, ms);
     })
   }
-  function toast(msg, { title = '', level = 'success', timeout = 2 * 1000 } = {}) {
+
+  function fire(...args) {
+    return window.Swal.fire(...args)
+  }
+
+  function toast(msg, { title = '', level = 'success', timeout = 3 * 1000 } = {}) {
     // https://sweetalert2.github.io/
     window.Swal.fire({
       timer: timeout,
@@ -225,11 +316,24 @@
       text: message,
     });
   }
-  async function confirm(title, { message, confirmButtonText = '确定', cancelButtonText = '取消' } = {}) {
+
+
+  async function confirm(title, options = {}) {
+    const defaultOptions = { confirmButtonText: '确定', cancelButtonText: '取消' };
+
+    if (typeof title !== 'string') {
+      options = { ...defaultOptions, ...title };
+      title = '';
+    } else {
+      options = { ...defaultOptions, ...options };
+    }
+
+    const { message, msg, confirmButtonText, cancelButtonText } = options;
+
     // https://sweetalert2.github.io/
     return window.Swal.fire({
       title,
-      text: message,
+      text: message || msg,
       width: '40vw',
       showCancelButton: true,
       confirmButtonText,
@@ -266,7 +370,9 @@
    * @returns {string}
    */
   function wrapInIIFE(text) {
-    return `(() => { ${text} })()`
+    return `(() => {
+      ${text}
+    })()`
   }
 
   GM_addElement('script', {
@@ -278,6 +384,8 @@
   GM_addElement('script', {
     textContent: wrapInIIFE(scriptContent),
   });
+
+  // --- function declarations ---
 
   /** 点击连接导致的url change */
   function emitUrlChangeEventWhenLinkClicked(history) {
@@ -292,7 +400,7 @@
       const urlChangedDelay = 300;
 
       setTimeout(() => {
-        console.log('event: send');
+        // console.log('event: send');
         document.body.dispatchEvent(new CustomEvent(eventName, { bubbles: true, detail: { targetPath } }));
       }, urlChangedDelay);
 
@@ -306,7 +414,7 @@
     const eventName = 'tampermonkey-utils:pushState';
 
     const listener = (e) => {
-      console.log('event: rx', e);
+      // console.log('event: rx', e);
 
       cb(e.detail.targetPath)
     };
@@ -318,15 +426,30 @@
     }
   }
 
-  function findElementsByText(text, selector) {
+  function findElementsByText(text, selector, { directParent = false } = {}) {
     const { ___error: error, $$ } = window.tampermonkeyUtils;
 
     if (!text || !selector) { error(`[invalid params] text and selector required`); return [] }
 
-    const predict = text instanceof RegExp ? content => text.test(content) : content => text === content;
+    function isDirectParentOfText(e) {
 
-    return $$(selector).filter(e => predict(e.textContent.trim()));
+      return e.childNodes.length === 1 && e.firstChild.nodeName === '#text'
+    }
+
+    const textMather = text instanceof RegExp ? content => text.test(content) : content => text === content;
+
+    const predicate = (e) => {
+      if (directParent) {
+        return isDirectParentOfText(e) && textMather(e.textContent.trim())
+      }
+
+      return textMather(e.textContent.trim())
+    }
+
+    return $$(selector).filter(predicate);
   }
+
+  function toLink(url, text = url) { return `<a target="_blank" href="${url}">${text}</a>` }
 
   function merge(target, src, { prefix = 'lodash__', postfix = '' } = {}) {
     const { ___error: error } = tampermonkeyUtils;
