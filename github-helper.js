@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHubHelper
 // @namespace    http://tampermonkey.net/
-// @version      5.1.1
+// @version      5.4
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -13,6 +13,9 @@
 
 
 // CHANGELOG
+// 5.4 add main js after package.json
+// 5.3.0 Distinct issue autor
+// 5.2.0 add runkit
 // 5.1.0 提示同名 npm 包
 // 5.0.0 compile TS - copy to TS
 // 4.4.4 BadgePortal
@@ -20,7 +23,18 @@
 (async function() {
   'use strict';
 
-  const { $$, $, insertScript, ready } = tampermonkeyUtils;
+  const {
+    $$,
+    $,
+    insertScript,
+    ready,
+    toLink,
+    isString,
+    getElementAsync,
+    findElementsByText,
+    onUrlChange,
+  // eslint-disable-next-line no-undef
+  } = tampermonkeyUtils;
 
   const { name: scriptName, version: scriptVersion } = GM_info.script;
 
@@ -46,19 +60,77 @@
 
   console.time(label + ' costs')
   await main()
-
   console.timeEnd(label + ' costs')
 
   async function main() {
-    if (isSourceCodePage('ts')) {
+    init();
+
+    onUrlChange(() => init())
+  }
+
+  async function init() {
+    if (isPage(/.ts/)) {
       return await compile()
     }
 
-    await badge();
+    if (isPage('issues')) {
+      return await helpIssue()
+    }
+
+    return Promise.all([
+      badge(),
+      showMainEntry(),
+    ])
+  }
+  function isPage(pattern) {
+    if (isString(pattern)) {
+      return location.pathname.includes(pattern);
+    }
+
+    return pattern.test(location.pathname)
   }
 
-  function isSourceCodePage(type) {
-    return location.pathname.endsWith('.' + type);
+  async function showMainEntry() {
+    // console.time('ms')
+    var pkgNode = await getElementAsync('[title="package.json"]');
+    // log('pkgNode', pkgNode)
+    // console.timeEnd('ms')
+    if (!pkgNode) { return }
+
+    const { json } = await readPkgJSON();
+    // log('main', json.main)
+    pkgNode.insertAdjacentHTML('beforeend', `<span style="opacity: 0.5;"> ${json.main || 'index.js'}</span>`)
+  }
+
+  async function helpIssue() {
+    // and index
+    const nodes = $$('.timeline-comment-header .author.Link--primary');
+
+    var names = nodes.map(el => el.textContent)
+    const freq = {};
+
+    names.map((n, idx) => {
+      if (!freq[n]) { freq[n] = 1 }
+      else { freq[n] += 1 }
+
+      const index = freq[n];
+
+      setTimeout(() => {
+        nodes[idx].insertAdjacentHTML('afterend', `<span style="color: purple;">${' #' + index}</span>`)
+      })
+    });
+
+    // highlight
+    [$('.timeline-comment-header'), ...findElementsByText(/Author/, '.timeline-comment-header')].forEach((el) => {
+      el.style.backgroundColor = 'yellowgreen';
+      // el.querySelector('.author').insertAdjacentHTML('afterend', `<span style="color: purple;">${' #' + (idx + 1)}</span>`)
+    });
+
+    [/Owner/, /Contributor/, /Member/].forEach(pattern => {
+      findElementsByText(pattern, '.timeline-comment-header').forEach(el => {
+        el.querySelector('.author').insertAdjacentHTML('afterend', `<span style="color: purple;">${' => ' + pattern}</span>`)
+      })
+    });
   }
 
   async function compile() {
@@ -135,7 +207,7 @@
   // https://raw.githubusercontent.com/gcanti/newtype-ts/master/package.json
   function toRawPath(url) {
     return url.replace('github.com', 'raw.githubusercontent.com')
-      .replace(/\/blob\/(master|main)\//, '/$1/')
+      .replace(/\/blob\/([^/]+?)\//, '/$1/')
   }
 
   async function findPackageJSONURL() {
@@ -154,6 +226,18 @@
     return location.pathname.split('/').slice(1, 3).join('/');
   }
 
+  async function readPkgJSON() {
+    if (readPkgJSON.promise) { return readPkgJSON.promise }
+
+    const p = findPackageJSONRawPath().then(path => {
+      return fetch(path).then(resp => resp.json()).then(json => ({ path, json }));
+    });
+
+    readPkgJSON.promise = p
+
+    return p;
+  }
+
   async function badge() {
     // Refused to execute inline event handler because it violates the following Content Security Policy directive: "script-src 'unsafe-eval' github.githubassets.com"
     // document.head.insertAdjacentHTML('beforeend', `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-eval' *">`)
@@ -163,8 +247,10 @@
     }
 
     // Your code here...
-    const path = await findPackageJSONRawPath();
-    const [err1, packageJSON = {}] = await box(fetch(path).then(resp => resp.json()));
+    const [err1, { path, json: packageJSON }] = await box(readPkgJSON());
+    // const [err1, packageJSON = {}] = await box(fetch(path).then(resp => resp.json()));
+
+    log('packageJSON', packageJSON);
 
     const [hostNode, over1Children] = await getEnsuredHostNode();
     const style = over1Children ? `margin-right: 1rem;` : '';
@@ -187,7 +273,10 @@
     if (err1 || !pname || (!publisher && !npmName)) {
       let text;
 
-      if (err1) error(`fetch package.json failed: path = "${path}"`, err1);
+      if (err1) {
+        text = 'no package.json';
+        error(`fetch package.json failed: path = "${path}"`, err1);
+      }
       else if (!pname) error(`no "name" field in package.json`, { path, packageJSON });
       else {
         error(`no package named "${pname}" published to npm`, registryResp);
@@ -196,7 +285,7 @@
       // const hostNode = await findClosestHeader(container)
       // if (!hostNode) { error(`no h element find in "${container}"`); return; }
 
-      await insertUnpublishedBadge(hostNode, { name: pname, style });
+      await insertUnpublishedBadge(hostNode, { name: pname, style, text });
 
       return;
     }
@@ -219,6 +308,8 @@
     }
 
     const { name, description, version } = packageJSON;
+    // add runkit
+    insertHtml(hostNode, toLink(`https://npm.runkit.com/${name}`, 'Runkit', { cls: 'btn ml-2 d-none d-md-block' }))
 
     const [existing, badgeLinkHTML] = await composeBadgeLinkHTML(name, { publisher, version, description, style });
 
@@ -239,7 +330,7 @@
 
     // hostNode.insertAdjacentHTML('afterend', );
 
-    insertBadge(hostNode, badgeLinkHTML);
+    insertHtml(hostNode, badgeLinkHTML);
   }
 
   function hasMoreThanOneChildren(hostNode) {
@@ -261,7 +352,9 @@
       return composeVSCodeMarketplaceLinkHTML(name, publisher, { version, description, style })
     }
 
-    return composeNpmLinkHTML(name, { version, description, style });
+    const npm = await composeNpmLinkHTML(name, { version, description, style });
+
+    return npm;
   }
 
   async function composeVSCodeMarketplaceLinkHTML(name, publisher, { version = '', description = '', style = '' } = {}) {
@@ -406,10 +499,10 @@
       </a>`;
     }
 
-    insertBadge(hostNode, html);
+    insertHtml(hostNode, html);
   }
 
-  function insertBadge(hostNode, html) {
+  function insertHtml(hostNode, html) {
     hostNode.insertAdjacentHTML(position, html);
   }
 
