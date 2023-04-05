@@ -1,19 +1,22 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.18
-// @description  try to take over the world!
+// @version      1.19
+// @description  utils.user.js
 // @author       孟陬
 // @match        http://*/*
 // @match        https://*/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
+// @updateURL    https://code.alipay.com/monkey-wrench/teamper-monkey/raw/master/utils.user.js
 // @run-at document-start
 // @grant GM_addElement
 // @grant GM_info
+// @grant        GM_setClipboard
 
 // ==/UserScript==
 
 // CHANGELOG
+// 1.19 add getElementByText
 // 1.15 add withTime
 // 1.14 add toKebabCase createStyle
 // 1.13 add `time2Readable` `seconds`
@@ -46,6 +49,13 @@
     sleep,
     wait: sleep,
     delay: sleep,
+
+    isFunction,
+    isFunc: ${isFunction.toString()},
+    isString: ${isString.toString()},
+    isArray: ${isArray.toString()},
+
+    copy,
     toast,
     fire,
     alert,
@@ -64,6 +74,7 @@
     diff,
 
     time2Readable,
+    timeToReadable: time2Readable,
     seconds,
 
     createStyle,
@@ -80,6 +91,14 @@
     merge: ${merge.toString()},
     findElementsByText: ${findElementsByText.toString()},
     getElementsByText: ${findElementsByText.toString()},
+    getElementByText: ${getElementByText.toString()},
+    getElementByTextAsync: ${getElementByTextAsync.toString()},
+    getElementAsync: ${getElementAsync.toString()},
+    listElementsByTextAsync: ${listElementsByTextAsync.toString()},
+    loop: ${loop.toString()},
+
+    findNearestOperationBtn: ${findNearestOperationBtn.toString()},
+
     toLink: ${toLink.toString()},
 
     onUrlChange: ${onUrlChange.toString()},
@@ -265,6 +284,12 @@
    * @returns {Promise<[boolean, HTMLElement]>}
    */
   async function readyCore(readySentry, { timeout = 5 * 1000, interval = 500 } = {}) {
+    const readySentryElement = typeof readySentry === 'function' ? readySentry() : $(readySentry);
+
+    if (readySentryElement) {
+      return [true, readySentryElement];
+    }
+
     const iterations = timeout / interval;
     await sleep(20);
 
@@ -283,6 +308,14 @@
         resolve(ms);
       }, ms);
     })
+  }
+
+  function isFunction(val) {
+    return typeof val === 'function'
+  }
+
+  function copy(text) {
+    GM_setClipboard(text)
   }
 
   function fire(...args) {
@@ -426,30 +459,122 @@
     }
   }
 
-  function findElementsByText(text, selector, { directParent = false } = {}) {
-    const { ___error: error, $$ } = window.tampermonkeyUtils;
+  async function getElementAsync(selector) {
+    const { $, loop } = window.tampermonkeyUtils;
+
+    return loop(() => $(selector))
+  }
+
+  async function loop(getter, { interval = 500, times = 10 } = {}) {
+    const { $, sleep, ___error: error, time2Readable } = window.tampermonkeyUtils;
+
+    let i;
+    for (i = 0; i < times; i++) {
+      const el = getter(i);
+      // console.log('i =', i)
+
+      if (el) { return el }
+      await sleep(500);
+    }
+
+    error('No valid result resolved after', i, `tries in ${time2Readable(i * 500)}`);
+    return undefined;
+  }
+
+  async function getElementByTextAsync(text, selector, ...args) {
+    const { ___error: error } = window.tampermonkeyUtils;
+
+    await tampermonkeyUtils.ready(selector);
+    let i;
+    for (i = 0; i < 10; i++) {
+      const el = tampermonkeyUtils.getElementByText(text, selector, ...args);
+      // console.log('i =', i)
+
+      if (el) { return el }
+      await tampermonkeyUtils.sleep(500);
+    }
+
+    error('No element', { text, selector }, 'find after', i, 'tries in 5s');
+    return undefined;
+  }
+
+  async function listElementsByTextAsync(texts, selector, ...args) {
+    const { ___error: error, getElementByTextAsync } = window.tampermonkeyUtils;
+
+    const elements = (await Promise.all(texts.map((text) => getElementByTextAsync(text, selector, ...args)))).filter(Boolean)
+    if (elements.length) { return elements }
+
+    error('No elements', { texts, selector }, 'find');
+    return [];
+  }
+
+  function getElementByText(...args) {
+    return tampermonkeyUtils.findElementsByText(...args)[0];
+  }
+  function findElementsByText(text, selector, { directParent = false, parent, visible = true, async = false } = {}) {
+    const { ___error: error, $$, ready } = window.tampermonkeyUtils;
 
     if (!text || !selector) { error(`[invalid params] text and selector required`); return [] }
 
     function isDirectParentOfText(e) {
-
       return e.childNodes.length === 1 && e.firstChild.nodeName === '#text'
     }
 
-    const textMather = text instanceof RegExp ? content => text.test(content) : content => text === content;
+    /** @type {(content: string) => boolean} */
+    const isTextMathed = text instanceof RegExp ? content => text.test(content) : content => text === content;
 
-    const predicate = (e) => {
+    const predicate = (el) => {
+      // btn not visible when e.getBoundingClientRect().width === 0
+      const visibleByUser = visible ? !!el.getBoundingClientRect().width : true
+      const common = visibleByUser && isTextMathed(el.textContent.trim())
+
       if (directParent) {
-        return isDirectParentOfText(e) && textMather(e.textContent.trim())
+        return isDirectParentOfText(el) && common
       }
 
-      return textMather(e.textContent.trim())
+      return common
     }
 
-    return $$(selector).filter(predicate);
+    const query = () => {
+      const candidates = parent ? [...parent.querySelectorAll(selector)] : $$(selector);
+
+      return candidates.filter(predicate);
+    }
+
+    if (async) {
+      return ready(selector).then(query);
+    }
+
+    return query();
   }
 
-  function toLink(url, text = url) { return `<a target="_blank" href="${url}">${text}</a>` }
+  /** Find the nearest active button in the current operation area. */
+  function findNearestOperationBtn(textOrRegexp, selector) {
+    const { ___error: error, getElementByText } = window.tampermonkeyUtils;
+
+    let parent = document.activeElement.parentElement;
+    let i = 1;
+
+    const activeBtnSelector = selector.includes(':not([disabled])') ? selector : `${selector}:not([disabled])`;
+    let target;
+
+    while (parent && !(target = getElementByText(textOrRegexp, activeBtnSelector, { parent }))) {
+      i++;
+      parent = parent.parentElement
+    }
+
+    i >= 15 && error('try find activeBtn in document.activeElement\'s parentElement', i, 'times, but not found');
+
+    return target;
+  }
+
+  function isFunction(val) { return typeof val === 'function' }
+  function isString(val) { return typeof val === 'string' }
+  function isArray(val) { return Array.isArray(val); }
+
+  function toLink(url, text = url, { style = '', cls='' } = {}) {
+    return `<a target="_blank" ${cls && 'class="' + cls + '"'} href="${url}"${ style ? 'style="'+style+'"' : '' }>${text} 🔥🐒</a>`
+  }
 
   function merge(target, src, { prefix = 'lodash__', postfix = '' } = {}) {
     const { ___error: error } = tampermonkeyUtils;
@@ -475,7 +600,8 @@
     return result;
   }
 
-  async function requestPackageJson(hostname) {
+  async function requestPackageJson() {
+    const hostname = location.hostname;
     const { request } = tampermonkeyUtils;
 
     const repoId = location.pathname.match(/\/([\w\-]+\/[\w\-]+).*/)[1]
