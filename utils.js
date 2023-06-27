@@ -8,14 +8,15 @@
 // @match        https://*/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @updateURL    https://code.alipay.com/monkey-wrench/teamper-monkey/raw/master/utils.user.js
-// @run-at document-start
-// @grant GM_addElement
-// @grant GM_info
+// @run-at       document-start
+// @grant        GM_addElement
+// @grant        GM_info
 // @grant        GM_setClipboard
 
 // ==/UserScript==
 
 // CHANGELOG
+// 1.20 get initial commit of github
 // 1.19 add getElementByText
 // 1.15 add withTime
 // 1.14 add toKebabCase createStyle
@@ -81,7 +82,13 @@
     toKebabCase,
     withTime,
 
+    // github utils begin
+    getFirstCommitUrl: ${getFirstCommitUrl.toString()},
+    getRepoId: ${getRepoId.toString()},
+    getFirstCommit: ${getFirstCommit.toString()},
     requestPackageJson: ${requestPackageJson.toString()},
+    // github utils end
+
     findVariablesLeakingIntoGlobalScope: ${findVariablesLeakingIntoGlobalScope.toString()},
 
     ___npmInstallInBrowser: ${___npmInstallInBrowser.toString()},
@@ -89,12 +96,17 @@
     install: ${install.toString()},
 
     merge: ${merge.toString()},
+
     findElementsByText: ${findElementsByText.toString()},
     getElementsByText: ${findElementsByText.toString()},
     getElementByText: ${getElementByText.toString()},
     getElementByTextAsync: ${getElementByTextAsync.toString()},
     getElementAsync: ${getElementAsync.toString()},
     listElementsByTextAsync: ${listElementsByTextAsync.toString()},
+    findElementsByTextAsync: ${findElementsByTextAsync.toString()},
+    getElementsByTextAsync: ${findElementsByTextAsync.toString()},
+    onChildChanged: ${onChildChanged.toString()},
+
     loop: ${loop.toString()},
 
     findNearestOperationBtn: ${findNearestOperationBtn.toString()},
@@ -511,6 +523,9 @@
   function getElementByText(...args) {
     return tampermonkeyUtils.findElementsByText(...args)[0];
   }
+  function findElementsByTextAsync(text, selector) {
+    return tampermonkeyUtils.findElementsByText(text, selector, { async: true });
+  }
   function findElementsByText(text, selector, { directParent = false, parent, visible = true, async = false } = {}) {
     const { ___error: error, $$, ready } = window.tampermonkeyUtils;
 
@@ -598,6 +613,70 @@
     result.merged = total - result.conflicted;
 
     return result;
+  }
+
+/*   const log = console.log;*/
+  function onChildChanged(root = '#app', { predicate, cb }) {
+    const observer = new MutationObserver(mutationRecords => {
+      // log('observe mutationRecords:', mutationRecords);
+      const mutation = mutationRecords.find(({ target }) => {
+        return predicate(target);
+      });
+
+      if (mutation) { cb(mutation.target) }
+    });
+    // log(`observe $('${root}')`, $(root));
+    // observe everything except attributes
+    observer.observe(tampermonkeyUtils.$(root), {
+      childList: true, // observe direct children
+      subtree: true, // and lower descendants too
+      // characterDataOldValue: true // pass old data to callback
+    });
+  }
+
+  function getFirstCommitUrl() {
+    // get the last commit and extract the url
+    return tampermonkeyUtils.getFirstCommit()
+      .then(commits => { console.log('[getFirstCommitUrl] commits', commits); return commits; })
+      .then(commits => commits.pop().html_url)
+  }
+
+  function getRepoId() {
+    const repoId = location.pathname.match(/\/([\w\-]+\/[\w\-]+).*/)[1]
+
+    return repoId;
+  }
+
+  // Use the github public api to navigate to the
+  // last commit of a GitHub repository
+  function getFirstCommit(repoId = tampermonkeyUtils.getRepoId()) {
+    // args[1] is the `orgname/repo` url fragment
+    // args[2] is the optional branch or hash
+    // will respond all the commits `https://api.github.com/repos/egoist/dum/commits?sha=`
+    const sha = '';
+
+    return fetch('https://api.github.com/repos/' + repoId + '/commits?sha=' + sha)
+    // the link header has additional urls for paging
+    // parse the original JSON for the case where no other pages exist
+      .then(res => Promise.all([res.headers.get('link'), res.json()]))
+
+    // get last page of commits
+      .then(results => {
+      // results[0] is the link
+      // results[1] is the first page of commits
+
+      if (results[0]) {
+        // the link contains two urls in the form
+        // <https://github.com/...>; rel=blah, <https://github.com/...>; rel=thelastpage
+        // split the url out of the string
+        var pageurl = results[0].split(',')[1].split(';')[0].slice(2, -1);
+        // fetch the last page
+        return fetch(pageurl).then(res => res.json());
+      }
+
+      // if no link, we know we're on the only page
+      return results[1];
+    })
   }
 
   async function requestPackageJson() {
