@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         iShortcuts
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  try to take over the world! iShortcuts.user.js
 // @author       孟陬
 // @match        https://yuyan.antfin-inc.com/*
@@ -13,11 +13,13 @@
 // @match        https://jiang.antgroup-inc.cn/nominationDetail?*
 // @match        https://ide.alipay.com/antcode/repo?repoId*
 // @match        https://connect-ant.antgroup-inc.cn/detail*
+// @match        https://aone.alipay.com/issue/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        GM_setClipboard
 // ==/UserScript==
 
 // CHANGELOG
+// 1.2 add isSingleKeyStroke to avoid mis-keystoke
 // 1.0 初始化
 (async function() {
   'use strict';
@@ -69,7 +71,7 @@
   // i => open in web ide
   // esc => cancel
   async function addShortcuts() {
-    debug('addShortcuts added', added)
+    debug('addShortcuts added yet?', added)
 
     const operations = {
       // e => edit
@@ -81,7 +83,22 @@
       // cmd + enter => submit
       submitBtn: {
         el: undefined,
-        selectors: () => findNearestOperationBtn(/.{2,10}/, '.ant-btn-primary') || findNearestOperationBtn(/提交/, '.calm-box'),
+        selectors: () => {
+          const btns = [
+            [/.{2,6}/, '.ant-btn-primary'],
+            [/提交评论/, '.next-btn-primary'],
+            [/提交/, '.calm-box'],
+          ];
+          for (const [ textRegexp, selector ] of btns) {
+            const el = findNearestOperationBtn(textRegexp, selector);
+
+            if (el) {
+              return el;
+            }
+          }
+
+          return null;
+        },
         // selectors: [/.{2,}/, '.ant-btn-primary:not([disabled])'],
         key: ({ ctrlKey, metaKey, key }) => (ctrlKey || metaKey) && key === 'Enter',
         keyId: 'CMD+Enter',
@@ -137,8 +154,26 @@
 
     added = true;
 
+    isSingleKeyStroke.lastTime = 0;
+    function isSingleKeyStroke(event) {
+      if (event.metaKey) { return true }
+
+      const curTime = Date.now();
+      const lastTime = isSingleKeyStroke.lastTime;
+
+      isSingleKeyStroke.lastTime = curTime;
+
+      if (!lastTime || curTime - lastTime > 1000) {
+        return true;
+      }
+
+      return false;
+    }
+
     document.addEventListener('keydown', (event) => {
       const { key } = event;
+      log('event', event)
+      if (!isSingleKeyStroke(event)) { return; }
       // log({ key });
 
       for (const name of names) {
@@ -201,6 +236,8 @@
 
   function highlight(el, { key, keyId }) {
     if (el.__highlighted) { return }
+
+    debug('highlight', el, key, keyId);
 
     el.style.outline = `2px dashed red`;
     el.__highlighted = true;
