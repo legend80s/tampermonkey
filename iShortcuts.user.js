@@ -172,7 +172,7 @@
 
     document.addEventListener('keydown', (event) => {
       const { key } = event;
-      log('event', event)
+      debug('event', event)
       if (!isSingleKeyStroke(event)) { return; }
       // log({ key });
 
@@ -203,11 +203,14 @@
         highlight(btn, op);
 
         sleep(100).then(() => {
-          btn.click();
+          const clickable = btn.firstElementChild || btn;
+          clickable.click();
+
           log('click', name)
+          debug(btn, btn !== clickable ? clickable : '')
         }).then(() => {
           const lgtmInput = $('.ant-mentions > textarea');
-          log('lgtmInput', lgtmInput)
+          // log('lgtmInput', lgtmInput)
           if (lgtmInput) {
             // lgtmInput.value = 'LGTM';
             lgtmInput.setAttribute('value', 'LGTM')
@@ -242,7 +245,7 @@
     el.style.outline = `2px dashed red`;
     el.__highlighted = true;
 
-    el.insertAdjacentHTML('beforeend', `<sub style="margin-left: 0.2em; font-size: 1em;"><var>${ isString(key) ? key.toUpperCase() : keyId }</var></sub>`);
+    el.insertAdjacentHTML('beforeend', `<sub style="margin-left: 0.2em; font-size: 0.8em;"><var>${ isString(key) ? key.toUpperCase() : keyId }</var></sub>`);
   }
 
   async function isMainContentInteractive() {
