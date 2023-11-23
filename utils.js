@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.19
+// @version      1.20
 // @description  utils.user.js
 // @author       孟陬
 // @match        http://*/*
@@ -93,6 +93,8 @@
 
     ___npmInstallInBrowser: ${___npmInstallInBrowser.toString()},
     ___npmDownload: ${___npmDownload.toString()},
+    ___fetchUnpkgCdn: ${___fetchUnpkgCdn.toString()},
+
     install: ${install.toString()},
 
     merge: ${merge.toString()},
@@ -114,6 +116,8 @@
     toLink: ${toLink.toString()},
 
     onUrlChange: ${onUrlChange.toString()},
+    sum: ${sum.toString()},
+    mean: ${mean.toString()},
   };
 
   if (!window.tampermonkeyUtils) {
@@ -455,6 +459,15 @@
     }
   }
 
+  function sum(...args) {
+    return args.reduce((acc, count) => acc + count, 0);
+  }
+  function mean(...args) {
+    const { sum } = window.tampermonkeyUtils;
+
+    return sum(...args) / args.length
+  }
+
   function onUrlChange(cb) {
     const eventName = 'tampermonkey-utils:pushState';
 
@@ -519,6 +532,8 @@
     error('No elements', { texts, selector }, 'find');
     return [];
   }
+
+  // function debounce
 
   function getElementByText(...args) {
     return tampermonkeyUtils.findElementsByText(...args)[0];
@@ -615,7 +630,7 @@
     return result;
   }
 
-/*   const log = console.log;*/
+  /*   const log = console.log;*/
   function onChildChanged(root = '#app', { predicate, cb }) {
     const observer = new MutationObserver(mutationRecords => {
       // log('observe mutationRecords:', mutationRecords);
@@ -718,6 +733,7 @@
     }));
   };
 
+  /** use tampermonkeyUtils.install instead */
   function ___npmDownload(src, originName, info, successCallback, errorCallback) {
     const { ___log: log } = tampermonkeyUtils;
     log(`'${originName}' installing...`);
@@ -734,6 +750,8 @@
 
     npmInstallScript.src = src;
 
+    // npmInstallScript.setAttribute('crossorigin', '');
+
     npmInstallScript.onload = (resp) => {
       console.timeEnd(successTimerLabel)
       successCallback(resp);
@@ -748,8 +766,9 @@
     document.body.removeChild(npmInstallScript);
   }
 
-  function ___npmInstallInBrowser(name, info, successCallback, errorCallback) {
-    const { ___npmDownload: npmDownload } = tampermonkeyUtils;
+  /** use tampermonkeyUtils.install instead */
+  async function ___npmInstallInBrowser(name, info, successCallback, errorCallback) {
+    const { ___npmDownload: npmDownload, ___fetchUnpkgCdn: fetchUnpkgCdn, ___log: log } = tampermonkeyUtils;
 
     const originName = name.trim();
     // console.log(originName);
@@ -757,8 +776,19 @@
     if (/^https?:\/\//.test(originName)) {
       npmDownload(originName, originName, info, successCallback, errorCallback);
     } else {
-      npmDownload(`https://unpkg.com/${originName}`, originName, info, successCallback, errorCallback);
+      const endpoint = await fetchUnpkgCdn(originName);
+      log('install script', endpoint)
+
+      npmDownload(endpoint, originName, info, successCallback, errorCallback);
     }
+  }
+
+  async function ___fetchUnpkgCdn(name) {
+    const url = `https://unpkg.com/${name}`;
+
+    const resp = await fetch(url);
+
+    return resp.url;
   }
 
   /**
