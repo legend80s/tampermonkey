@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHubHelper
 // @namespace    http://tampermonkey.net/
-// @version      5.4
+// @version      5.4.1
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -32,7 +32,9 @@
     isString,
     getElementAsync,
     findElementsByText,
+    getElementByTextAsync,
     onUrlChange,
+    getFirstCommitUrl,
   // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
@@ -63,13 +65,13 @@
   console.timeEnd(label + ' costs')
 
   async function main() {
-    init();
-
     onUrlChange(() => init())
+
+    return init();
   }
 
   async function init() {
-    if (isPage(/.ts/)) {
+    if (isPage(/\.ts$/)) {
       return await compile()
     }
 
@@ -78,10 +80,56 @@
     }
 
     return Promise.all([
+      addFirstCommitBtn(),
       badge(),
       showMainEntry(),
     ])
   }
+
+  async function addFirstCommitBtn() {
+    if (addFirstCommitBtn.added) { return }
+
+    var gotoFileBtn = await getElementByTextAsync(/Go to file/, 'a');
+
+    if (!gotoFileBtn) { return }
+
+    var btn = document.createElement('button');
+
+    gotoFileBtn.className.split(' ').forEach((cls) => btn.classList.add(cls));
+    const txt = 'Initial Commit 🔥🐒'
+    btn.textContent = txt;
+
+    btn.onclick = async () => {
+      btn.classList.add('disabled');
+      btn.textContent += ' Searching... 3s'
+
+      const t = setInterval(() => { btn.textContent = btn.textContent.replace(/\d+/, (p) => Number(p) - 1) }, 1000)
+
+      try {
+        const url = await getFirstCommitUrl();
+        log('url', url)
+        btn.textContent = txt;
+
+        location.href = url;
+      } catch (err) {
+        error(err);
+        btn.textContent = [btn.textContent, err.message.slice(0, 100)].join(' ');
+
+        error('[getFirstCommitUrl]', err);
+
+        location.href = `https://github.com/egoist/dum/network`;
+      } finally {
+        clearInterval(t);
+        btn.classList.remove('disabled');
+      }
+
+    }
+
+    gotoFileBtn.insertAdjacentElement('beforebegin', btn)
+
+    addFirstCommitBtn.added = true;
+  }
+
   function isPage(pattern) {
     if (isString(pattern)) {
       return location.pathname.includes(pattern);
@@ -98,8 +146,10 @@
     if (!pkgNode) { return }
 
     const { json } = await readPkgJSON();
-    // log('main', json.main)
-    pkgNode.insertAdjacentHTML('beforeend', `<span style="opacity: 0.5;"> ${json.main || 'index.js'}</span>`)
+    // log('main', json.main);
+    setTimeout(() => {
+      pkgNode.insertAdjacentHTML('beforeend', `<span style="opacity: 0.5;"> ${json.main || 'index.js'}</span>`)
+    }, 400)
   }
 
   async function helpIssue() {
@@ -195,7 +245,9 @@
   </div>
     `
 
-    $('.Box-header remote-clipboard-copy.btn-octicon').insertAdjacentHTML('beforebegin', html);
+    const element = $('.Box-header remote-clipboard-copy.btn-octicon');
+
+    element.insertAdjacentHTML('beforebegin', html);
 
     return await ready('#'+id);
   }
