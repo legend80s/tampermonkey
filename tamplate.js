@@ -21,12 +21,13 @@
     createLoggers,
     time2Readable,
     onUrlChange,
+  // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
   const { log } = createLoggers(GM_info);
 
   main()
-  
+
   function main() {
     init()
 
