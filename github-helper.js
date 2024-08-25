@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHubHelper
 // @namespace    http://tampermonkey.net/
-// @version      5.4.1
+// @version      5.4.2
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
@@ -13,6 +13,7 @@
 
 
 // CHANGELOG
+// 5.4.2 fix initial commit btn not inline by insert it after code btn
 // 5.4 add main js after package.json
 // 5.3.0 Distinct issue autor
 // 5.2.0 add runkit
@@ -27,10 +28,12 @@
     $$,
     $,
     insertScript,
+    sleep,
     ready,
     toLink,
     isString,
     getElementAsync,
+    getElementByText,
     findElementsByText,
     getElementByTextAsync,
     onUrlChange,
@@ -80,23 +83,32 @@
     }
 
     return Promise.all([
-      addFirstCommitBtn(),
+//       addFirstCommitBtn().then(async () => {
+//         await sleep(500);
+//         addFirstCommitBtn()
+//       }),
+      addFirstCommitBtn().then(async () => {
+        await sleep(500);
+        addFirstCommitBtn()
+      }),
       badge(),
       showMainEntry(),
     ])
   }
 
   async function addFirstCommitBtn() {
-    if (addFirstCommitBtn.added) { return }
+    // console.log(`$('#initial-commit-github-helper')`, $('#initial-commit-github-helper'))
+    if ($('#initial-commit-github-helper')) { return }
 
-    var gotoFileBtn = await getElementByTextAsync(/Go to file/, 'a');
+    const gotoFileBtn = await getElementByTextAsync(/Add file/, 'button');
 
     if (!gotoFileBtn) { return }
 
-    var btn = document.createElement('button');
+    const btn = document.createElement('button');
+    btn.id = 'initial-commit-github-helper'
 
     gotoFileBtn.className.split(' ').forEach((cls) => btn.classList.add(cls));
-    const txt = 'Initial Commit 🔥🐒'
+    const txt = 'Initial Commit 🐒'
     btn.textContent = txt;
 
     btn.onclick = async () => {
@@ -125,7 +137,9 @@
 
     }
 
-    gotoFileBtn.insertAdjacentElement('beforebegin', btn)
+    getElementByText(/Code/, 'button').insertAdjacentElement('afterend', btn)
+
+    // gotoFileBtn.insertAdjacentElement('beforebegin', btn)
 
     addFirstCommitBtn.added = true;
   }
