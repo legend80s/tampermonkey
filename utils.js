@@ -1,21 +1,24 @@
 // ==UserScript==
-// @name         插件通用 utils
+// @name         Tampermonkey 插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.20
-// @description  utils.user.js
-// @author       孟陬
+// @version      1.21
+// @description  An util like jQuery or lodash.
+// @author       legend80s
 // @match        http://*/*
 // @match        https://*/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
-// @updateURL    https://code.alipay.com/monkey-wrench/teamper-monkey/raw/master/utils.user.js
+// @updateURL    https://git.cnaeit.com/liuchuanzong/work-helper-tampermonkey/-/raw/main/utils.userscript.js
+// @downloadURL  https://git.cnaeit.com/liuchuanzong/work-helper-tampermonkey/-/raw/main/utils.userscript.js
 // @run-at       document-start
 // @grant        GM_addElement
 // @grant        GM_info
 // @grant        GM_setClipboard
+// @noframes
 
 // ==/UserScript==
 
 // CHANGELOG
+// 1.21 add @noframes running on the main pages, but not at iframes.
 // 1.20 get initial commit of github
 // 1.19 add getElementByText
 // 1.15 add withTime
@@ -38,12 +41,14 @@
   const appName = '${appName}';
   const label = '${label}';
   const error = (...args) => console.error(label, now(), ...args);
+  const warn = (...args) => console.warn(label, now(), ...args);
   const log = (...args) => console.log(label, now(), ...args);
   const $ = (selector) => document.querySelector(selector);
   const $$ = selectors => [...document.querySelectorAll(selectors)];
   const tampermonkeyUtils = {
     ___error: error,
     ___log: log,
+    ___warn: warn,
 
     $,
     $$,
@@ -55,6 +60,8 @@
     isFunc: ${isFunction.toString()},
     isString: ${isString.toString()},
     isArray: ${isArray.toString()},
+    countWordDescend: ${countWordDescend.toString()},
+    compareVersion: ${compareVersion.toString()},
 
     copy,
     toast,
@@ -102,8 +109,10 @@
     findElementsByText: ${findElementsByText.toString()},
     getElementsByText: ${findElementsByText.toString()},
     getElementByText: ${getElementByText.toString()},
+    $Text: ${getElementByText.toString()},
     getElementByTextAsync: ${getElementByTextAsync.toString()},
     getElementAsync: ${getElementAsync.toString()},
+    $Async: ${getElementAsync.toString()},
     listElementsByTextAsync: ${listElementsByTextAsync.toString()},
     findElementsByTextAsync: ${findElementsByTextAsync.toString()},
     getElementsByTextAsync: ${findElementsByTextAsync.toString()},
@@ -127,9 +136,15 @@
       Object.assign(window.tampermonkeyUtils, tampermonkeyUtils)
       error('window.tampermonkeyUtils 已存在，仍然会注入', window.tampermonkeyUtils)
   }
-  function request(url, options = { credentials: 'include' }) {
+  function request(url, { method = 'GET', timeout = 0, type = 'json', credentials = 'include' } = {}) {
     // log('GET', url);
-    return window.fetch(url, options).then(resp => resp.json());
+    const { promise, resolve, reject } = Promise.withResolvers()
+
+    window.fetch(url, { method, credentials }).then(resp => type === 'json' ? resp.json() : resp.text()).then(resolve).catch(reject);
+
+    timeout && setTimeout(() => { reject(new RangeError('timeout')) }, timeout)
+
+    return promise
   }
   let prev;
   function calculateDiff() {
@@ -149,6 +164,9 @@
   }
 
   function generateLabel(GM_info) {
+    if (!GM_info.script) {
+      console.error(\`expect GM_info be an Object with script object inside, but found type: "\${typeof GM_info}",\`, 'value:', GM_info)
+    }
     const { name, version } = GM_info.script;
     const label = name + '@' + version + '>';
     return label;
@@ -247,7 +265,7 @@
 
   function now() {
     const date = new Date();
-    const time = [date.getHours(), date.getMinutes(), date.getSeconds()].map(n => String(n).padStart(2, '0')).join(':')
+    const time = [date.getHours(), date.getMinutes(), date.getSeconds()].map(n => String(n).padStart(2, '0')).join(':') + '.' + date.getMilliseconds()
 
     return \`[\${time}]\`;
   }
@@ -338,20 +356,20 @@
     return window.Swal.fire(...args)
   }
 
-  function toast(msg, { title = '', level = 'success', timeout = 3 * 1000 } = {}) {
+  function toast(msg, { position = 'center', title = '', level = 'success', timeout = 3 * 1000 } = {}) {
     // https://sweetalert2.github.io/
     window.Swal.fire({
       timer: timeout,
-      timerProgressBar: true,
+      timerProgressBar: false,
       background: '#000000c7',
       // background: 'black',
       color: '#ffffffcf',
-      position: 'top',
+      position,
       // allowEscapeKey: true,
       toast: true,
       title,
       text: msg,
-      width: '50vw',
+      width: 'fit-content',
       showConfirmButton: false,
       // margin: '0',
       // padding: '0',
@@ -410,8 +428,8 @@
       return true;
   }
 
-  (${emitUrlChangeEventWhenLinkClicked.toString()})(window.history)
-
+  ;(${emitUrlChangeEventWhenLinkClicked.toString()})(window.history);
+  ;(${emitUrlChangeEventWhenForwardOrBackBtnClicked.toString()})(window);
   `;
 
   /**
@@ -459,6 +477,23 @@
     }
   }
 
+  function emitUrlChangeEventWhenForwardOrBackBtnClicked(window) {
+    window.addEventListener('popstate', function(event) {
+      //console.log('浏览器的返回或前进按钮被点击了', event);
+
+      const urlChangedDelay = 300;
+      const eventName = 'tampermonkey-utils:pushState';
+
+      setTimeout(() => {
+        const targetPath = location.href;
+        //console.log('event: send', targetPath);
+        document.body.dispatchEvent(new CustomEvent(eventName, { bubbles: true, detail: { targetPath } }));
+      }, urlChangedDelay);
+
+      // 在这里执行需要的逻辑，比如页面内容的更新等
+    });
+  }
+
   function sum(...args) {
     return args.reduce((acc, count) => acc + count, 0);
   }
@@ -484,10 +519,16 @@
     }
   }
 
-  async function getElementAsync(selector) {
-    const { $, loop } = window.tampermonkeyUtils;
+  async function getElementAsync(selector, { visible = true } = {}) {
+    const { $$, loop } = window.tampermonkeyUtils;
 
-    return loop(() => $(selector))
+    return loop(() => {
+      const elements = $$(selector)
+
+      const isValid = (el) => visible ? el && el.getBoundingClientRect().width > 0 : el
+
+      return elements.find(el => isValid(el))
+    })
   }
 
   async function loop(getter, { interval = 500, times = 10 } = {}) {
@@ -502,24 +543,31 @@
       await sleep(500);
     }
 
-    error('No valid result resolved after', i, `tries in ${time2Readable(i * 500)}`);
+    error('No valid result resolved after', i, `retries in ${time2Readable(i * 500)}`);
     return undefined;
   }
 
-  async function getElementByTextAsync(text, selector, ...args) {
-    const { ___error: error } = window.tampermonkeyUtils;
+  async function getElementByTextAsync(text, selector, opts = {}) {
+    const { ___error: error, ___warn: warn } = window.tampermonkeyUtils;
+    const { timeout = 0, silent = false, ...rest } = opts
+    const start = Date.now()
 
     await tampermonkeyUtils.ready(selector);
-    let i;
+
+    let i = 0;
     for (i = 0; i < 10; i++) {
-      const el = tampermonkeyUtils.getElementByText(text, selector, ...args);
+      const el = tampermonkeyUtils.getElementByText(text, selector, rest);
       // console.log('i =', i)
+      if (timeout && Date.now() - start >= timeout) {
+        !silent && warn('No element', { text, selector }, 'find after', i, 'tries in', timeout, 'ms');
+        return undefined
+      }
 
       if (el) { return el }
       await tampermonkeyUtils.sleep(500);
     }
 
-    error('No element', { text, selector }, 'find after', i, 'tries in 5s');
+    !silent && warn('No element', { text, selector }, 'find after', i, 'tries in 5s');
     return undefined;
   }
 
@@ -601,6 +649,39 @@
   function isFunction(val) { return typeof val === 'function' }
   function isString(val) { return typeof val === 'string' }
   function isArray(val) { return Array.isArray(val); }
+
+  function countWordDescend(text, { lang = 'zh-hans' } = {}) {
+    const segmenter = new Intl.Segmenter(lang, { granularity: 'word' })
+
+    return Object.entries(
+      [...segmenter.segment(text)]
+      .filter(x => x.isWordLike)
+      .map(x => x.segment)
+      .reduce((acc, w) => {
+        acc[w] = (acc[w] || 0) + 1;
+        return acc
+      }, Object.create(null))
+    ).sort((a, b) => b[1] - a[1])
+  }
+
+  /** 版本号对比 */
+  function compareVersion(v1, v2) {
+    const v1Arr = v1.split('.');
+    const v2Arr = v2.split('.');
+    const len = Math.max(v1Arr.length, v2Arr.length);
+
+    for (let i = 0; i < len; i++) {
+      const num1 = parseInt(v1Arr[i] || '0', 10);
+      const num2 = parseInt(v2Arr[i] || '0', 10);
+
+      if (num1 > num2) {
+        return 1;
+      } else if (num1 < num2) {
+        return -1;
+      }
+    }
+    return 0;
+  };
 
   function toLink(url, text = url, { style = '', cls='' } = {}) {
     return `<a target="_blank" ${cls && 'class="' + cls + '"'} href="${url}"${ style ? 'style="'+style+'"' : '' }>${text} 🔥🐒</a>`
