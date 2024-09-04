@@ -1,10 +1,11 @@
 // ==UserScript==
-// @name         GitHubHelper
+// @name         GitHub Helper
 // @namespace    http://tampermonkey.net/
-// @version      5.4.2
+// @version      5.5
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
 // @match        https://github.com/*/*
+// @match        https://git.homegu.com/*/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=github.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addElement
@@ -13,7 +14,7 @@
 
 
 // CHANGELOG
-// 5.4.2 fix initial commit btn not inline by insert it after code btn
+// 5.5 add color to important contributors such as members
 // 5.4 add main js after package.json
 // 5.3.0 Distinct issue autor
 // 5.2.0 add runkit
@@ -28,17 +29,15 @@
     $$,
     $,
     insertScript,
-    sleep,
     ready,
     toLink,
     isString,
     getElementAsync,
-    getElementByText,
     findElementsByText,
     getElementByTextAsync,
     onUrlChange,
     getFirstCommitUrl,
-  // eslint-disable-next-line no-undef
+    // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
   const { name: scriptName, version: scriptVersion } = GM_info.script;
@@ -78,37 +77,31 @@
       return await compile()
     }
 
-    if (isPage('issues')) {
+    // log('init', location.pathname)
+
+    if (isPage(/(issues|pull)\/\d/)) {
+      // log('helpIssue')
       return await helpIssue()
     }
 
     return Promise.all([
-//       addFirstCommitBtn().then(async () => {
-//         await sleep(500);
-//         addFirstCommitBtn()
-//       }),
-      addFirstCommitBtn().then(async () => {
-        await sleep(500);
-        addFirstCommitBtn()
-      }),
+      addFirstCommitBtn(),
       badge(),
       showMainEntry(),
     ])
   }
 
   async function addFirstCommitBtn() {
-    // console.log(`$('#initial-commit-github-helper')`, $('#initial-commit-github-helper'))
-    if ($('#initial-commit-github-helper')) { return }
+    if (addFirstCommitBtn.added) { return }
 
-    const gotoFileBtn = await getElementByTextAsync(/Add file/, 'button');
+    var gotoFileBtn = await getElementByTextAsync(/Go to file/, 'a');
 
     if (!gotoFileBtn) { return }
 
-    const btn = document.createElement('button');
-    btn.id = 'initial-commit-github-helper'
+    var btn = document.createElement('button');
 
     gotoFileBtn.className.split(' ').forEach((cls) => btn.classList.add(cls));
-    const txt = 'Initial Commit 🐒'
+    const txt = 'Initial Commit 🔥🐒'
     btn.textContent = txt;
 
     btn.onclick = async () => {
@@ -137,9 +130,7 @@
 
     }
 
-    getElementByText(/Code/, 'button').insertAdjacentElement('afterend', btn)
-
-    // gotoFileBtn.insertAdjacentElement('beforebegin', btn)
+    gotoFileBtn.insertAdjacentElement('beforebegin', btn)
 
     addFirstCommitBtn.added = true;
   }
@@ -153,20 +144,24 @@
   }
 
   async function showMainEntry() {
-    // console.time('ms')
+    console.time('showMainEntry ms')
     var pkgNode = await getElementAsync('[title="package.json"]');
-    // log('pkgNode', pkgNode)
-    // console.timeEnd('ms')
+    log('pkgNode', pkgNode)
+    console.timeEnd('showMainEntry ms')
     if (!pkgNode) { return }
 
     const { json } = await readPkgJSON();
+    // log('json', json)
     // log('main', json.main);
     setTimeout(() => {
-      pkgNode.insertAdjacentHTML('beforeend', `<span style="opacity: 0.5;"> ${json.main || 'index.js'}</span>`)
-    }, 400)
+      $$('[title="package.json"]').forEach(el =>
+                                           el.insertAdjacentHTML('beforeend', `<span style="opacity: 0.5;"> ${json.main || 'no main in package.json'}</span>`)
+                                          )
+    }, 500)
   }
 
   async function helpIssue() {
+    log('helpIssue')
     // and index
     const nodes = $$('.timeline-comment-header .author.Link--primary');
 
@@ -180,19 +175,21 @@
       const index = freq[n];
 
       setTimeout(() => {
-        nodes[idx].insertAdjacentHTML('afterend', `<span style="color: purple;">${' #' + index}</span>`)
+        nodes[idx].insertAdjacentHTML('afterend', `<span style="color: purple;">${' #' + index} ${'🙉'.repeat(index)}</span>`)
       })
     });
 
     // highlight
     [$('.timeline-comment-header'), ...findElementsByText(/Author/, '.timeline-comment-header')].forEach((el) => {
-      el.style.backgroundColor = 'yellowgreen';
+      el.style.backgroundColor = '#b0fbb4';
       // el.querySelector('.author').insertAdjacentHTML('afterend', `<span style="color: purple;">${' #' + (idx + 1)}</span>`)
     });
 
-    [/Owner/, /Contributor/, /Member/].forEach(pattern => {
+    [/Owner/, /Contributor/, /Member/, /Collaborator/].forEach(pattern => {
       findElementsByText(pattern, '.timeline-comment-header').forEach(el => {
-        el.querySelector('.author').insertAdjacentHTML('afterend', `<span style="color: purple;">${' => ' + pattern}</span>`)
+        el.style.backgroundColor = '#bcff32';
+
+        el.querySelector('.author').insertAdjacentHTML('afterend', `<strong style="color: purple; font-weight: bold;">${' => ' + pattern}</strong>`)
       })
     });
   }
@@ -272,16 +269,18 @@
   // https://github.com/gcanti/newtype-ts/blob/master/package.json =>
   // https://raw.githubusercontent.com/gcanti/newtype-ts/master/package.json
   function toRawPath(url) {
-    return url.replace('github.com', 'raw.githubusercontent.com')
+    return url.replace(location.hostname, 'raw.githubusercontent.com')
       .replace(/\/blob\/([^/]+?)\//, '/$1/')
   }
 
   async function findPackageJSONURL() {
-    await ready('.Box-row');
-    const node = queryChild('.Box-row a', a => a.textContent === 'package.json');
+    // await ready('.Box-row');
+    // const node = queryChild('.Box-row a', a => a.textContent === 'package.json');
     // log('queryChild node', node)
 
-    return node?.href || '';
+    const pkgNode = await getElementAsync('[title="package.json"]');
+
+    return pkgNode?.href || '';
   }
 
   async function findPackageJSONRawPath() {
@@ -293,9 +292,11 @@
   }
 
   async function readPkgJSON() {
-    if (readPkgJSON.promise) { return readPkgJSON.promise }
+    // if (readPkgJSON.promise) { return readPkgJSON.promise }
 
     const p = findPackageJSONRawPath().then(path => {
+      log('path', path)
+      if (!path) { return {} }
       return fetch(path).then(resp => resp.json()).then(json => ({ path, json }));
     });
 
