@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Tampermonkey 插件通用 utils
+// @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.21
-// @description  An util like jQuery or lodash.
+// @version      1.22.3
+// @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
 // @match        https://*/*
@@ -13,11 +13,18 @@
 // @grant        GM_addElement
 // @grant        GM_info
 // @grant        GM_setClipboard
-// @noframes
+// @grant        GM_xmlhttpRequest
+// @grant        GM_xmlhttpRequest
+
+// @noxxxframesx    有些网站运行在inframe 里面故不能增加该 annotation
 
 // ==/UserScript==
 
 // CHANGELOG
+// 1.22.3 replace jsdelivr.net to jsdmirror.com
+// 1.22.2 fix textOrRegexp const re-assignment error
+// 1.22.1 fix ready error as $ always return true when jQuery exists
+// 1.22 add querySelector to allow `selector[attr=文本]`
 // 1.21 add @noframes running on the main pages, but not at iframes.
 // 1.20 get initial commit of github
 // 1.19 add getElementByText
@@ -43,14 +50,14 @@
   const error = (...args) => console.error(label, now(), ...args);
   const warn = (...args) => console.warn(label, now(), ...args);
   const log = (...args) => console.log(label, now(), ...args);
-  const $ = (selector) => document.querySelector(selector);
+  // const $ = (selector) => document.querySelector(selector);
   const $$ = selectors => [...document.querySelectorAll(selectors)];
   const tampermonkeyUtils = {
     ___error: error,
     ___log: log,
     ___warn: warn,
 
-    $,
+    $: ${querySelector.toString()},
     $$,
     sleep,
     wait: sleep,
@@ -89,12 +96,13 @@
     toKebabCase,
     withTime,
 
-    // github utils begin
+    // --- github utils begin ---
     getFirstCommitUrl: ${getFirstCommitUrl.toString()},
     getRepoId: ${getRepoId.toString()},
     getFirstCommit: ${getFirstCommit.toString()},
     requestPackageJson: ${requestPackageJson.toString()},
-    // github utils end
+    isGithubAccessible: ${isGithubAccessible.toString()},
+    // --- github utils end ---
 
     findVariablesLeakingIntoGlobalScope: ${findVariablesLeakingIntoGlobalScope.toString()},
 
@@ -131,10 +139,10 @@
 
   if (!window.tampermonkeyUtils) {
       window.tampermonkeyUtils = tampermonkeyUtils;
-      log('已注入 window.tampermonkeyUtils', window.tampermonkeyUtils)
+      // log('已注入 window.tampermonkeyUtils', window.tampermonkeyUtils)
   } else {
       Object.assign(window.tampermonkeyUtils, tampermonkeyUtils)
-      error('window.tampermonkeyUtils 已存在，仍然会注入', window.tampermonkeyUtils)
+      warn('window.tampermonkeyUtils 已存在，仍然会注入', window.tampermonkeyUtils)
   }
   function request(url, { method = 'GET', timeout = 0, type = 'json', credentials = 'include' } = {}) {
     // log('GET', url);
@@ -201,10 +209,10 @@
   function createStyle(params) {
     return Object.keys(params)
       .map((key) => {
-      const rule = params[key];
+        const rule = params[key];
 
-      return toKebabCase(key) + ': ' + rule
-    }, '')
+        return toKebabCase(key) + ': ' + rule
+      }, '')
       .join('; ')
   }
 
@@ -220,7 +228,7 @@
   }
 
   function time2Readable(begin, end) {
-    const duration = end - begin;
+    const duration = end !== undefined ? end - begin : begin;
 
     const seconds = duration / 1000
     const min = seconds / 60;
@@ -318,6 +326,7 @@
    * @returns {Promise<[boolean, HTMLElement]>}
    */
   async function readyCore(readySentry, { timeout = 5 * 1000, interval = 500 } = {}) {
+    const { $ } = tampermonkeyUtils;
     const readySentryElement = typeof readySentry === 'function' ? readySentry() : $(readySentry);
 
     if (readySentryElement) {
@@ -336,12 +345,28 @@
     }
     return [false, null];
   }
+
   function sleep(ms) {
+    const time = typeof ms === 'number' ? ms : strToMilliseconds(ms)
+
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve(ms);
-      }, ms);
+      }, time);
     })
+
+    function strToMilliseconds(str) {
+      const reg = /(\\d+)(s|min|h)/
+      const m = str.match(reg)
+
+      if (!m) { throw new TypeError('should be of pattern ' + reg + ' but find "' + str + '"') }
+
+      const [_, num, unit] = m
+
+      if (unit === 's') { return num * 1000 }
+      if (unit === 'min') { return num * 1000 * 60 }
+      if (unit === 'h') { return num * 1000 * 60 * 60 }
+    }
   }
 
   function isFunction(val) {
@@ -443,7 +468,8 @@
   }
 
   GM_addElement('script', {
-    src: 'https://cdn.jsdelivr.net/npm/sweetalert2@11',
+    src: 'https://cdn.jsdmirror.com/npm/sweetalert2@11',
+    // src: 'https://cdn.jsdelivr.net/npm/sweetalert2@11',
   });
 
   // console.log('scriptContent', scriptContent)
@@ -532,7 +558,7 @@
   }
 
   async function loop(getter, { interval = 500, times = 10 } = {}) {
-    const { $, sleep, ___error: error, time2Readable } = window.tampermonkeyUtils;
+    const { $, sleep, ___error: error, ___warn: warn, time2Readable } = window.tampermonkeyUtils;
 
     let i;
     for (i = 0; i < times; i++) {
@@ -543,20 +569,20 @@
       await sleep(500);
     }
 
-    error('No valid result resolved after', i, `retries in ${time2Readable(i * 500)}`);
+    warn('No valid result resolved after', i, `retries in ${time2Readable(i * 500)}`);
     return undefined;
   }
 
   async function getElementByTextAsync(text, selector, opts = {}) {
-    const { ___error: error, ___warn: warn } = window.tampermonkeyUtils;
-    const { timeout = 0, silent = false, ...rest } = opts
+    const { ___error: error, ___warn: warn, ready, getElementByText, sleep } = window.tampermonkeyUtils;
+    const { timeout = 0, silent = false, interval = 500, ...rest } = opts
     const start = Date.now()
 
-    await tampermonkeyUtils.ready(selector);
+    await ready(selector);
 
     let i = 0;
     for (i = 0; i < 10; i++) {
-      const el = tampermonkeyUtils.getElementByText(text, selector, rest);
+      const el = getElementByText(text, selector, rest);
       // console.log('i =', i)
       if (timeout && Date.now() - start >= timeout) {
         !silent && warn('No element', { text, selector }, 'find after', i, 'tries in', timeout, 'ms');
@@ -564,7 +590,7 @@
       }
 
       if (el) { return el }
-      await tampermonkeyUtils.sleep(500);
+      await sleep(interval);
     }
 
     !silent && warn('No element', { text, selector }, 'find after', i, 'tries in 5s');
@@ -644,6 +670,28 @@
     i >= 15 && error('try find activeBtn in document.activeElement\'s parentElement', i, 'times, but not found');
 
     return target;
+  }
+
+  function querySelector(selector) {
+    // a[text=历史] a[text=/历史/] a[text=/\\d历史/]
+    const matches = selector.match(/(.+)?\[text=(.+)+\]/)
+
+    if (!matches) {
+      return document.querySelector(selector);
+    }
+
+    let [_, tag, textOrRegexp] = matches;
+    // console.log({ tag, textOrRegexp })
+
+    const regMatches = textOrRegexp.match(new RegExp(String.raw`/(.+)?/(\w*)`))
+
+    if (regMatches) {
+      const [_, pattern, flags] = regMatches;
+      // console.log({ pattern, flags })
+      textOrRegexp = new RegExp(pattern, flags)
+    }
+
+    return tampermonkeyUtils.getElementByText(textOrRegexp, tag)
   }
 
   function isFunction(val) { return typeof val === 'function' }
@@ -741,6 +789,33 @@
     const repoId = location.pathname.match(/\/([\w\-]+\/[\w\-]+).*/)[1]
 
     return repoId;
+  }
+
+  function isGithubAccessible(GM) {
+    let promise
+    let count = 0
+    return async ({ timeout = 3000 } = {}) => {
+      // console.log('promise', promise)
+
+      if (promise !== undefined) { return promise }
+      // console.log('request', ++count)
+
+      promise = GM.xmlHttpRequest({ timeout, url: 'https://github.com', method: 'HEAD' })
+        .then(resp => {
+        //console.log(resp);
+        return resp.status })
+        .catch((err) => {
+        // console.error('Oops!', err)
+      });
+
+      const status = await promise
+
+      // console.log('github status', status)
+
+      const accessible = status === 200
+
+      return accessible
+    }
   }
 
   // Use the github public api to navigate to the
