@@ -8,6 +8,7 @@
 // @match        https://hgithub.xyz/*
 // @match        https://github.com/*
 
+// @homepage     https://github.com/legend80s/tampermonkey/blob/master/replace-github.userscript.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=homegu.com
 // @grant        none
 // @run-at       context-menu
