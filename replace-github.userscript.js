@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         切换 GitHub
+// @name         右键切换 GitHub 地址
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  try to take over the world!
@@ -8,7 +8,7 @@
 // @match        https://hgithub.xyz/*
 // @match        https://github.com/*
 
-// @homepage     https://github.com/legend80s/tampermonkey/blob/master/replace-github.userscript.js
+// @homepage     https://github.com/legend80s/tampermonkey/blob/master/switch-github-in-context-menu.userscript.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=homegu.com
 // @grant        none
 // @run-at       context-menu
