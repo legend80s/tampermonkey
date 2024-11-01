@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.22.3
+// @version      1.23.0
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -13,14 +13,13 @@
 // @grant        GM_addElement
 // @grant        GM_info
 // @grant        GM_setClipboard
-// @grant        GM_xmlhttpRequest
-// @grant        GM_xmlhttpRequest
 
 // @noxxxframesx    有些网站运行在inframe 里面故不能增加该 annotation
 
 // ==/UserScript==
 
 // CHANGELOG
+// 1.23.0 add `powerfulQuerySelectorAll`
 // 1.22.3 replace jsdelivr.net to jsdmirror.com
 // 1.22.2 fix textOrRegexp const re-assignment error
 // 1.22.1 fix ready error as $ always return true when jQuery exists
@@ -51,14 +50,14 @@
   const warn = (...args) => console.warn(label, now(), ...args);
   const log = (...args) => console.log(label, now(), ...args);
   // const $ = (selector) => document.querySelector(selector);
-  const $$ = selectors => [...document.querySelectorAll(selectors)];
+  // const $$ = selectors => [...document.querySelectorAll(selectors)];
   const tampermonkeyUtils = {
     ___error: error,
     ___log: log,
     ___warn: warn,
 
-    $: ${querySelector.toString()},
-    $$,
+    $: ${powerfulQuerySelector.toString()},
+    $$: ${powerfulQuerySelectorAll.toString()},
     sleep,
     wait: sleep,
     delay: sleep,
@@ -468,7 +467,7 @@
   }
 
   GM_addElement('script', {
-    src: 'https://cdn.jsdmirror.com/npm/sweetalert2@11',
+    src: 'https://cdn.jsdmirror.cn/npm/sweetalert2@11.14.3',
     // src: 'https://cdn.jsdelivr.net/npm/sweetalert2@11',
   });
 
@@ -615,8 +614,8 @@
   function findElementsByTextAsync(text, selector) {
     return tampermonkeyUtils.findElementsByText(text, selector, { async: true });
   }
-  function findElementsByText(text, selector, { directParent = false, parent, visible = true, async = false } = {}) {
-    const { ___error: error, $$, ready } = window.tampermonkeyUtils;
+  function findElementsByText(text, selector, { directParent = false, parent = document, visible = true, async = false } = {}) {
+    const { ___error: error, ready } = window.tampermonkeyUtils;
 
     if (!text || !selector) { error(`[invalid params] text and selector required`); return [] }
 
@@ -640,7 +639,7 @@
     }
 
     const query = () => {
-      const candidates = parent ? [...parent.querySelectorAll(selector)] : $$(selector);
+      const candidates = [...parent.querySelectorAll(selector)];
 
       return candidates.filter(predicate);
     }
@@ -672,7 +671,7 @@
     return target;
   }
 
-  function querySelector(selector) {
+  function powerfulQuerySelector(selector) {
     // a[text=历史] a[text=/历史/] a[text=/\\d历史/]
     const matches = selector.match(/(.+)?\[text=(.+)+\]/)
 
@@ -692,6 +691,28 @@
     }
 
     return tampermonkeyUtils.getElementByText(textOrRegexp, tag)
+  }
+
+  function powerfulQuerySelectorAll(selector) {
+    // a[text=历史] a[text=/历史/] a[text=/\\d历史/]
+    const matches = selector.match(/(.+)?\[text=(.+)+\]/)
+
+    if (!matches) {
+      return [...document.querySelectorAll(selector)]
+    }
+
+    let [_, tag, textOrRegexp] = matches;
+    // console.log({ tag, textOrRegexp })
+
+    const regMatches = textOrRegexp.match(new RegExp(String.raw`/(.+)?/(\w*)`))
+
+    if (regMatches) {
+      const [_, pattern, flags] = regMatches;
+      // console.log({ pattern, flags })
+      textOrRegexp = new RegExp(pattern, flags)
+    }
+
+    return tampermonkeyUtils.findElementsByText(textOrRegexp, tag)
   }
 
   function isFunction(val) { return typeof val === 'function' }
