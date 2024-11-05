@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         替换网页 GitHub 地址
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  try to take over the world!
 // @author       legend80s
 // @match        https://npmmirror.com/package/*
@@ -16,6 +16,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.1 支持从多个github替换地址中选择一个速度最快的
 // 1.0 初始化
 (async function() {
   'use strict';
@@ -26,9 +27,11 @@
     ready,
     createLoggers,
     time2Readable,
+    sleep,
     onUrlChange,
     $Async,
     isGithubAccessible,
+    isSiteAccessible,
     // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
@@ -47,6 +50,7 @@
     // Code here
 
     await replace()
+    await replace()
 
     log('🎉 耗时', time2Readable(begin, Date.now()))
   }
@@ -55,15 +59,20 @@
     const github = `https://github.com`
     const s = `a[href^="${github}"]`
     await $Async(s)
-    const list = [...document.querySelectorAll(s)].filter(x => !!x.textContent)
 
-    log('list:', list)
+    //log('list1:', document.querySelectorAll(s).length)
+    const list = [...document.querySelectorAll(s)].filter(x => {
+      return !x.__replaced && !!x.textContent
+    })
+    //log('list:', list.length)
 
     for (const item of list) {
       const { url, tips } = await replaceGithub(item.href)
 
       item.href = url
-      item.title = url + ' ' + tips
+      item.__replaced = true
+      // log('mark', item.textContent, item, item.__replaced)
+      item.title = (item.title || '') + url + ' ' + tips
       item.insertAdjacentHTML('beforeEnd', `<span style="font-size: 68%;">${tips}</span>`)
     }
   }
@@ -71,9 +80,26 @@
   const isAccessible = isGithubAccessible(GM)
   let latency = 0
 
-  async function replaceGithub(url) {
-    const fast = 'https://git.homegu.com'
+  const is200 = isSiteAccessible(GM)
 
+  function getFastestReplacement(candidates) {
+/*     tampermonkeyUtils.gm = GM */
+    // console.log(tampermonkeyUtils.gm)
+    const { resolve, reject, promise } = Promise.withResolvers()
+    const rejectedUrls = []
+
+    candidates.forEach(url => {
+      is200(url)
+        .then((yes) => yes ? resolve(url) : rejectedUrls.push(url))
+        .then(() => { rejectedUrls.length === candidates.length && reject({ rejectedUrls, msg: 'all urls tried but none is 200' }) })
+    })
+
+    setTimeout(() => { reject({ rejectedUrls, msg: 'timeout' }) }, 3000)
+
+    return promise
+  }
+
+  async function replaceGithub(url) {
     // if we can detect if github is accessible
     // log(url)
     const urlInstance = new URL(url)
@@ -84,12 +110,24 @@
     let icon = ''
 
     const start = Date.now()
-    const accessible = await isAccessible({ timeout: 880 })
+    //console.time('isGithubAccessible')
+    const accessible = await isAccessible({ timeout: 80 })
+    //console.timeEnd('isGithubAccessible')
 
     if (accessible) {
       final = url
       icon = '🐙'
     } else {
+      //console.time('getFastestReplacement')
+      const fast = await getFastestReplacement([
+        'https://git.homegu.com',
+        'https://kkgithub.com',
+        'https://hgithub.xyz',
+        'https://hub.whtrys.space'
+      ])
+      //console.timeEnd('getFastestReplacement')
+      //log({ fast })
+
       final = url.replace(urlInstance.origin, fast)
       icon = '♻️'
     }
