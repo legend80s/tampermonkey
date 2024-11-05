@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.23.0
+// @version      1.24.0
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -19,6 +19,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.24.0 add debounce/isSiteAccessible/fetchHttpStatus
 // 1.23.0 add `powerfulQuerySelectorAll`
 // 1.22.3 replace jsdelivr.net to jsdmirror.com
 // 1.22.2 fix textOrRegexp const re-assignment error
@@ -68,6 +69,7 @@
     isArray: ${isArray.toString()},
     countWordDescend: ${countWordDescend.toString()},
     compareVersion: ${compareVersion.toString()},
+    debounce: ${debounce.toString()},
 
     copy,
     toast,
@@ -101,6 +103,8 @@
     getFirstCommit: ${getFirstCommit.toString()},
     requestPackageJson: ${requestPackageJson.toString()},
     isGithubAccessible: ${isGithubAccessible.toString()},
+    isSiteAccessible: ${isSiteAccessible.toString()},
+    fetchHttpStatus: ${fetchHttpStatus.toString()},
     // --- github utils end ---
 
     findVariablesLeakingIntoGlobalScope: ${findVariablesLeakingIntoGlobalScope.toString()},
@@ -606,7 +610,16 @@
     return [];
   }
 
-  // function debounce
+  function debounce(func, delay) {
+    let timer;
+    return (...args) => {
+      if (timer) clearTimeout(timer)
+
+      timer = setTimeout(() => {
+        func(...args)
+      }, delay)
+    }
+  }
 
   function getElementByText(...args) {
     return tampermonkeyUtils.findElementsByText(...args)[0];
@@ -781,22 +794,29 @@
   }
 
   /*   const log = console.log;*/
-  function onChildChanged(root = '#app', { predicate, cb }) {
+  function onChildChanged(root = '#app', { predicate = () => true, cb, config, debounceTime }) {
+    const { debounce } = tampermonkeyUtils;
+    const defaultConfig = {
+      childList: true, // observe direct children
+      subtree: true, // and lower descendants too
+      // characterDataOldValue: true // pass old data to callback
+    }
+
+    config ??= defaultConfig
+
+    const deCb = debounceTime ? debounce(cb, debounceTime) : cb
+
     const observer = new MutationObserver(mutationRecords => {
-      // log('observe mutationRecords:', mutationRecords);
+      // console.log('observe mutationRecords:', mutationRecords);
       const mutation = mutationRecords.find(({ target }) => {
         return predicate(target);
       });
 
-      if (mutation) { cb(mutation.target) }
+      if (mutation) { deCb(mutation.target) }
     });
     // log(`observe $('${root}')`, $(root));
     // observe everything except attributes
-    observer.observe(tampermonkeyUtils.$(root), {
-      childList: true, // observe direct children
-      subtree: true, // and lower descendants too
-      // characterDataOldValue: true // pass old data to callback
-    });
+    observer.observe(tampermonkeyUtils.$(root), config);
   }
 
   function getFirstCommitUrl() {
@@ -813,29 +833,44 @@
   }
 
   function isGithubAccessible(GM) {
-    let promise
+    const detect = tampermonkeyUtils.isSiteAccessible(GM);
+
+    return (opts) => detect(`https://github.com`, opts)
+  }
+
+  function isSiteAccessible(GM) {
+    const fetchHttpStatus = tampermonkeyUtils.fetchHttpStatus(GM);
+
+    return async (url, opts) => {
+      const res = await fetchHttpStatus(url, opts)
+
+      return res.status === 200
+    }
+  }
+
+  function fetchHttpStatus(GM) {
+    let promise = {}
     let count = 0
-    return async ({ timeout = 3000 } = {}) => {
+    return async (url, { timeout = 3000 } = {}) => {
       // console.log('promise', promise)
 
-      if (promise !== undefined) { return promise }
+      if (promise[url] !== undefined) {
+        // console.log('cache hit', url);
+        return promise[url]
+      }
       // console.log('request', ++count)
 
-      promise = GM.xmlHttpRequest({ timeout, url: 'https://github.com', method: 'HEAD' })
+      promise[url] = GM.xmlHttpRequest({ timeout, url, method: 'HEAD' })
         .then(resp => {
-        //console.log(resp);
-        return resp.status })
+          //console.log(resp);
+          return { status: resp.status }
+        })
         .catch((err) => {
-        // console.error('Oops!', err)
-      });
+          // console.error('Oops!', err)
+          return { error: err }
+        });
 
-      const status = await promise
-
-      // console.log('github status', status)
-
-      const accessible = status === 200
-
-      return accessible
+      return promise[url]
     }
   }
 
