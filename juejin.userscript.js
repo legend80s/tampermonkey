@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.1
 // @description  try to take over the world!
-// @author       You
+// @author       legend80s
 // @match        https://juejin.cn/*
 // @icon         https://www.google.com/s2/favicons?domain=juejin.cn
 // @grant        GM_info
