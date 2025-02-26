@@ -7,6 +7,9 @@
 // @match        https://git.homegu.com/*
 // @match        https://hgithub.xyz/*
 // @match        https://github.com/*
+// @match        https://kkgithub.com/*
+// @match        https://hub.whtrys.space/*
+
 
 // @homepage     https://github.com/legend80s/tampermonkey/blob/master/switch-github-in-context-menu.userscript.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=homegu.com
