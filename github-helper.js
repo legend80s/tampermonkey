@@ -4,8 +4,13 @@
 // @version      5.5
 // @description  Add npm and vscode extension marketplace version badge and link for github repo automatically.
 // @author       You
+
 // @match        https://github.com/*/*
 // @match        https://git.homegu.com/*/*
+// @match        https://hgithub.xyz/*/*
+// @match        https://kkgithub.com/*/*
+// @match        https://hub.whtrys.space/*
+
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=github.com
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addElement
@@ -145,8 +150,12 @@
 
   async function showMainEntry() {
     console.time('showMainEntry ms')
+    log(`$('#gh-pkg-main')`, $('#gh-pkg-main'))
+    if ($('#gh-pkg-main')) { return }
+
     var pkgNode = await getElementAsync('[title="package.json"]');
-    log('pkgNode', pkgNode)
+    // log('pkgNode', pkgNode)
+
     console.timeEnd('showMainEntry ms')
     if (!pkgNode) { return }
 
@@ -155,7 +164,7 @@
     // log('main', json.main);
     setTimeout(() => {
       $$('[title="package.json"]').forEach(el =>
-                                           el.insertAdjacentHTML('beforeend', `<span style="opacity: 0.5;"> ${json.main || 'no main in package.json'}</span>`)
+                                           el.insertAdjacentHTML('beforeend', `<span id="gh-pkg-main" style="opacity: 0.5;"> ${json.main || 'no main in package.json'}</span>`)
                                           )
     }, 500)
   }
@@ -180,14 +189,14 @@
     });
 
     // highlight
-    [$('.timeline-comment-header'), ...findElementsByText(/Author/, '.timeline-comment-header')].forEach((el) => {
+    [$('.timeline-comment-header'), ...findElementsByText(/Author/, '.timeline-comment-header')].filter(Boolean).forEach((el) => {
       el.style.backgroundColor = '#b0fbb4';
       // el.querySelector('.author').insertAdjacentHTML('afterend', `<span style="color: purple;">${' #' + (idx + 1)}</span>`)
     });
 
     [/Owner/, /Contributor/, /Member/, /Collaborator/].forEach(pattern => {
       findElementsByText(pattern, '.timeline-comment-header').forEach(el => {
-        el.style.backgroundColor = '#bcff32';
+        el.style.backgroundColor = 'rgb(188 255 50 / 50%)';
 
         el.querySelector('.author').insertAdjacentHTML('afterend', `<strong style="color: purple; font-weight: bold;">${' => ' + pattern}</strong>`)
       })
