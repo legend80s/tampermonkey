@@ -5,10 +5,12 @@
 // @description  try to take over the world!
 // @author       legend80s
 // @match        https://npmmirror.com/package/*
-// @match        https://4x-ant-design.antgroup.com/components/*
+// @match        https://4x-ant-design.antgroup.com/*
+// @match        https://ant-design.antgroup.com/*
 // @match        https://cn.bing.com/search?q=*
 // @match        https://www.npmjs.com/package/*
 // @match        https://www.ruanyifeng.com/blog/*.html
+// @match        https://ant-design.antgroup.com/components/*
 
 // @homepage     https://github.com/legend80s/tampermonkey/blob/master/replace-github.userscript.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=npmmirror.com
@@ -51,6 +53,8 @@
 
     await replace()
     await replace()
+    sleep(1000)
+    await replace()
 
     log('🎉 耗时', time2Readable(begin, Date.now()))
   }
@@ -60,11 +64,11 @@
     const s = `a[href^="${github}"]`
     await $Async(s)
 
-    //log('list1:', document.querySelectorAll(s).length)
+    log('list1:', document.querySelectorAll(s).length)
     const list = [...document.querySelectorAll(s)].filter(x => {
-      return !x.__replaced && !!x.textContent
+      return !x.__replaced // && !!x.textContent
     })
-    //log('list:', list.length)
+    log('list:', list.length)
 
     for (const item of list) {
       const { url, tips } = await replaceGithub(item.href)
