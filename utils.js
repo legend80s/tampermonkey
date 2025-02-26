@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.24.0
+// @version      1.24.1
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -19,6 +19,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.24.1 fix cdn url
 // 1.24.0 add debounce/isSiteAccessible/fetchHttpStatus
 // 1.23.0 add `powerfulQuerySelectorAll`
 // 1.22.3 replace jsdelivr.net to jsdmirror.com
@@ -471,7 +472,7 @@
   }
 
   GM_addElement('script', {
-    src: 'https://cdn.jsdmirror.cn/npm/sweetalert2@11.14.3',
+    src: 'https://cdn.jsdmirror.com/npm/sweetalert2@11.14.3',
     // src: 'https://cdn.jsdelivr.net/npm/sweetalert2@11',
   });
 
