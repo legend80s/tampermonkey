@@ -106,18 +106,18 @@
 
   function showPressedKeys(keys) {
     const keying = `<code id="pressed-keys" style="
-  background: #ffffffa3;
+  background: rgba(255 255 255 / 0.8);
   position: absolute;
   top: 45vh;
   left: 50%;
   transform: translate(-50%);
   z-index: 1000;
-  padding: 1rem 2rem;
+  padding: 0.8rem 1.2rem;
   border-radius: 0.5rem;
   font-size: 140%;
   color: darkviolet;
   font-family: inherit;
-"></code>`;
+"><kbd style=" font-size: 120%; color: blue; margin-inline-end: 0.25em;">🖱️</kbd><span></span></code>`;
 
     let el = $(`#pressed-keys`);
 
@@ -130,9 +130,10 @@
       el.style.display = 'none';
     } else {
       el.style.display = 'inline-block';
-      el.textContent = keys
+      const text = keys
         .map((k) => (k.length === 1 ? k.toUpperCase() : k))
         .join(' ');
+      el.querySelector('span').textContent = text;
     }
   }
 
