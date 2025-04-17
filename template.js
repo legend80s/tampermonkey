@@ -11,29 +11,33 @@
 
 // CHANGELOG
 // 1.0 初始化
-(async function() {
+// @ts-check
+(async function () {
   'use strict';
 
   // Your code here...
   const {
     $$,
     ready,
-    createLoggers,
     time2Readable,
     onUrlChange,
-  // eslint-disable-next-line no-undef
+    generateLabel,
+    // eslint-disable-next-line no-undef
+    // @ts-expect-error
   } = tampermonkeyUtils;
 
-  const label = generateLabel(GM_info)
-  const log = (...args) => debugging && console.log(label, ...args)
-  const error = (...args) => debugging && console.error(label, ...args)
+  // @ts-expect-error
+  const label = generateLabel(GM_info);
+  const debugging = true;
+  const log = (...args) => debugging && console.log(label, ...args);
+  const error = (...args) => debugging && console.error(label, ...args);
 
-  main()
+  main();
 
   function main() {
-    init()
+    init();
 
-    onUrlChange(() => init())
+    onUrlChange(() => init());
   }
 
   async function init() {
@@ -43,8 +47,13 @@
 
     const ifs = $$('iframe[src^=http]');
 
-    ifs.forEach(f => f.remove());
+    ifs.forEach((f) => f.remove());
 
-    log('🎉 移除', ifs.length, '个 iframe。耗时', time2Readable(begin, Date.now()))
+    log(
+      '🎉 移除',
+      ifs.length,
+      '个 iframe。耗时',
+      time2Readable(begin, Date.now())
+    );
   }
 })();
