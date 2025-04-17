@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         清爽的 CCTV
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  try to take over the world!
 // @author       孟陬
 // @match        https://tv.cctv.com/live/cctv*
@@ -10,6 +10,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.3 use ␣ to represent space. uppercase single key.
 // 1.2 Show pressing keys in center of screen.
 // 1.1 Add shortcuts F to fullscreen.
 // 1.0 初始化
@@ -115,7 +116,7 @@
   border-radius: 0.5rem;
   font-size: 140%;
   color: darkviolet;
-  font-weight: bold;
+  font-family: inherit;
 "></code>`;
 
     let el = $(`#pressed-keys`);
@@ -125,9 +126,14 @@
       el = $(`#pressed-keys`);
     }
 
-    keys.length
-      ? ((el.style.display = 'inline-block'), (el.textContent = keys.join(' ')))
-      : (el.style.display = 'none');
+    if (!keys.length) {
+      el.style.display = 'none';
+    } else {
+      el.style.display = 'inline-block';
+      el.textContent = keys
+        .map((k) => (k.length === 1 ? k.toUpperCase() : k))
+        .join(' ');
+    }
   }
 
   function bindShortcuts(shortcuts) {
@@ -151,7 +157,7 @@
     }, 400 * 1);
 
     document.addEventListener('keydown', (event) => {
-      pressedKeys.push(event.key === ' ' ? 'Space' : event.key);
+      pressedKeys.push(event.key === ' ' ? '␣' : event.key);
       showPressedKeys(pressedKeys);
       // console.log('keydown', event, event.key, pressedKeys)
       callComboKey();
