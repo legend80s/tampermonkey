@@ -106,7 +106,7 @@
 
   function showPressedKeys(keys) {
     const keying = `<code id="pressed-keys" style="
-  background: rgba(255 255 255 / 0.8);
+  background: rgb(42 39 39 / 80%);
   position: absolute;
   top: 45vh;
   left: 50%;
@@ -115,7 +115,7 @@
   padding: 0.8rem 1.2rem;
   border-radius: 0.5rem;
   font-size: 140%;
-  color: darkviolet;
+  color: white;
   font-family: inherit;
 "><kbd style=" font-size: 120%; color: blue; margin-inline-end: 0.25em;">🖱️</kbd><span></span></code>`;
 
