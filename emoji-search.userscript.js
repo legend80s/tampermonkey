@@ -287,7 +287,8 @@
           },
           model: 'kimi',
           stream: false,
-          use_search: true,
+          // 是否联网搜索
+          use_search: false,
           messages: [
             {
               role: 'user',
