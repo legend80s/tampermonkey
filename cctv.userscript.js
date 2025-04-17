@@ -108,7 +108,8 @@
   background: #ffffffa3;
   position: absolute;
   top: 45vh;
-  right: 50%;
+  left: 50%;
+  transform: translate(-50%);
   z-index: 1000;
   padding: 1rem 2rem;
   border-radius: 0.5rem;
@@ -147,7 +148,7 @@
           return true;
         }
       });
-    }, 400);
+    }, 400 * 1);
 
     document.addEventListener('keydown', (event) => {
       pressedKeys.push(event.key === ' ' ? 'Space' : event.key);
