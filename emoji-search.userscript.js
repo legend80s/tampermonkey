@@ -40,6 +40,23 @@
 
   main();
 
+  async function main() {
+    observeNetworkError(
+      {
+        initiatorType: 'fetch',
+        name: 'https://emojisearch.fun/api/completion?query=',
+      },
+      debounce(findEmojiFromKimi, 100)
+    );
+
+    $('form').addEventListener('submit', () => {
+      // console.log('submit', $('#fallback-from-kimi'))
+      $('#fallback-from-kimi')?.remove();
+    });
+
+    addChatSettings();
+  }
+
   function observeNetworkError({ initiatorType, name }, cb) {
     const observer = new PerformanceObserver((list) => {
       list.getEntries().forEach((entry) => {
@@ -135,23 +152,6 @@
     el.textContent = '🔴 ' + msg;
   }
 
-  async function main() {
-    observeNetworkError(
-      {
-        initiatorType: 'fetch',
-        name: 'https://emojisearch.fun/api/completion?query=',
-      },
-      debounce(findEmojiFromKimi, 100)
-    );
-
-    $('form').addEventListener('submit', () => {
-      // console.log('submit', $('#fallback-from-kimi'))
-      $('#fallback-from-kimi')?.remove();
-    });
-
-    addChatSettings();
-  }
-
   /** only keep the uniq ones by path */
   function uniqBy(arr, path) {
     var set = new Set();
@@ -167,7 +167,7 @@
   }
 
   function genPrompt(emojiText, [min, max]) {
-    const prompt = `give me ${min} to ${max} unique emojis which are most relevant to "${emojiText}" in format \`{emoji}:{desc}|{emoji:desc}\` for example: "🌍:地球，代表受污染的环境|🌫️:雾，代表空气污染". Only give the content and output in one line and in language ${navigator.language}.`;
+    const prompt = `give me ${min} to ${max} unique emojis which are most relevant to "${emojiText}" in format \`{emoji}:{desc}|{emoji:desc}\` for example: "🌍:地球，代表受污染的环境|🌫️:雾，代表空气污染". Only give the content and output in one line and in language ${navigator.language}. return ASAP.`;
 
     return prompt;
   }
