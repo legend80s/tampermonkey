@@ -6,7 +6,7 @@
 // @author       孟陬
 // @match        <$URL$>
 // @icon         <$ICON$>
-// @grant        none
+// @grant        GM_info
 // ==/UserScript==
 
 // CHANGELOG
@@ -24,7 +24,9 @@
   // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
-  const { log } = createLoggers(GM_info);
+  const label = generateLabel(GM_info)
+  const log = (...args) => debugging && console.log(label, ...args)
+  const error = (...args) => debugging && console.error(label, ...args)
 
   main()
 
