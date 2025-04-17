@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         清爽的 CCTV
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  try to take over the world!
 // @author       孟陬
 // @match        https://tv.cctv.com/live/cctv*
@@ -10,7 +10,8 @@
 // ==/UserScript==
 
 // CHANGELOG
-// 1.1 F to fullscreen
+// 1.2 Show pressing keys in center of screen.
+// 1.1 Add shortcuts F to fullscreen.
 // 1.0 初始化
 (async function () {
   'use strict';
@@ -67,7 +68,7 @@
       const channel = String(index + 1);
       return {
         key: channel,
-        desc: 'CCTV ' + channel,
+        desc: 'Play CCTV ' + channel,
         cb: () => getElementByText(new RegExp(`CCTV\-${channel}`), 'a').click(),
       };
     });
@@ -82,8 +83,8 @@
             .click(),
       },
       {
-        key: 'p',
-        desc: 'CCTV 5+',
+        key: '5p',
+        desc: 'Play CCTV 5+',
         cb: () => getElementByText(/CCTV-5\+/, 'a').click(),
       },
       ...cctvNumberSwitches,
@@ -102,13 +103,41 @@
     };
   }
 
+  function showPressedKeys(keys) {
+    const keying = `<code id="pressed-keys" style="
+  background: #ffffffa3;
+  position: absolute;
+  top: 45vh;
+  right: 50%;
+  z-index: 1000;
+  padding: 1rem 2rem;
+  border-radius: 0.5rem;
+  font-size: 140%;
+  color: darkviolet;
+  font-weight: bold;
+"></code>`;
+
+    let el = $(`#pressed-keys`);
+
+    if (!el) {
+      $('body').insertAdjacentHTML('afterbegin', keying);
+      el = $(`#pressed-keys`);
+    }
+
+    keys.length
+      ? ((el.style.display = 'inline-block'), (el.textContent = keys.join(' ')))
+      : (el.style.display = 'none');
+  }
+
   function bindShortcuts(shortcuts) {
     console.log(shortcuts);
     let pressedKeys = [];
+
     const callComboKey = debounce(() => {
       // console.log('pressedKeys', pressedKeys)
       const comboKey = pressedKeys.join('');
       pressedKeys = [];
+      showPressedKeys(pressedKeys);
 
       shortcuts.some((item) => {
         const { key, cb } = item;
@@ -121,8 +150,9 @@
     }, 400);
 
     document.addEventListener('keydown', (event) => {
-      pressedKeys.push(event.key);
-      // console.log('keydown', event.key, pressedKeys)
+      pressedKeys.push(event.key === ' ' ? 'Space' : event.key);
+      showPressedKeys(pressedKeys);
+      // console.log('keydown', event, event.key, pressedKeys)
       callComboKey();
     });
   }
