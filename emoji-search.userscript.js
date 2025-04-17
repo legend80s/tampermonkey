@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emoji Search
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      2.0.0
 // @description  try to take over the world!
 // @author       You
 // @match        https://emojisearch.fun/*
@@ -12,6 +12,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 2.0.0 改写提示词，优化性能，从16s到8s
 // 1.0.0 如果请求报错则使用 kimi 兜底
 
 // @ts-check
@@ -39,22 +40,21 @@
 
   main();
 
-  function observe({ initiatorType, name }, cb) {
+  function observeNetworkError({ initiatorType, name }, cb) {
     const observer = new PerformanceObserver((list) => {
       list.getEntries().forEach((entry) => {
         // console.log('entry', entry)
-        if (
-          entry.initiatorType === 'fetch' ||
-          entry.initiatorType === 'xmlhttprequest'
-        ) {
-          if (entry.responseStatus >= 400) {
-            // console.error('网络请求错误:', entry.name, '状态码:', entry.responseStatus);
-            if (
-              entry.initiatorType === initiatorType &&
-              entry.name.includes(name)
-            ) {
-              cb(entry);
-            }
+        // @ts-expect-error
+        const entryInitiatorType = entry.initiatorType;
+
+        // @ts-expect-error
+        if (entry.responseStatus >= 400) {
+          // console.error('网络请求错误:', entry.name, '状态码:', entry.responseStatus);
+          if (
+            entryInitiatorType === initiatorType &&
+            entry.name.includes(name)
+          ) {
+            cb(entry);
           }
         }
       });
@@ -136,7 +136,7 @@
   }
 
   async function main() {
-    observe(
+    observeNetworkError(
       {
         initiatorType: 'fetch',
         name: 'https://emojisearch.fun/api/completion?query=',
@@ -166,9 +166,17 @@
     });
   }
 
-  async function chat(emojiText, { range: [min = 3, max = 10] }) {
+  function genPrompt(emojiText, [min, max]) {
+    const prompt = `give me ${min} to ${max} unique emojis which are most relevant to "${emojiText}" in format \`{emoji}:{desc}|{emoji:desc}\` for example: "🌍:地球，代表受污染的环境|🌫️:雾，代表空气污染". Only give the content and output in one line and in language ${navigator.language}.`;
+
+    return prompt;
+  }
+
+  // @ts-expect-error
+  async function chat(emojiText, { range: [min = 3, max = 10] } = {}) {
     // const question = '1+1';
-    const question = `give me ${min} to ${max} unique emojis which are most relevant to "${emojiText}" in json format [{ emoji, desc }]. only give me the json!`;
+    // const question = `give me ${min} to ${max} unique emojis which are most relevant to "${emojiText}" in json format [{ emoji, desc }]. only give me the json!`;
+    const question = genPrompt(emojiText, [min, max]);
 
     const list = await complete(question);
 
@@ -207,11 +215,16 @@
    */
   function toJSON(str) {
     try {
-      return JSON.parse(
-        str.replaceAll('""', `"`).match(/```json(.*)```/s)?.[1] || '[]'
-      );
+      //       return JSON.parse(
+      //         str.replaceAll('""', `"`).match(/```json(.*)```/s)?.[1] || '[]'
+      //       );
+      return str.split('|').map((pair) => {
+        const [emoji, desc] = pair.split(':');
+        return { emoji, desc };
+      });
     } catch (error) {
-      console.error('str:', str, ', match', str.match(/```json(.*)```/s));
+      console.error('str:', str);
+      // console.error('str:', str, ', match', str.match(/```json(.*)```/s));
       // console.error(error)
       throw error;
     }
@@ -314,10 +327,16 @@
 
       for (const line of lines) {
         if (line.startsWith('data: {')) {
-          const json = JSON.parse(line.slice(6));
-          if (json.event === 'cmpl') {
-            list.push(json.text);
-            // console.log('json.text:', json.text);
+          try {
+            const json = JSON.parse(line.slice(6));
+            if (json.event === 'cmpl') {
+              list.push(json.text);
+              // console.log('json.text:', json.text);
+            }
+          } catch (error) {
+            logError(line);
+            logError(error);
+            throw error;
           }
         }
       }
