@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         清爽的 CCTV
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  try to take over the world!
 // @author       孟陬
 // @match        https://tv.cctv.com/live/cctv*
@@ -10,6 +10,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.4 show toast before action
 // 1.3 use ␣ to represent space. uppercase single key.
 // 1.2 Show pressing keys in center of screen.
 // 1.1 Add shortcuts F to fullscreen.
@@ -104,6 +105,17 @@
     };
   }
 
+  function toast(msg, { duration = 500, onClose } = {}) {
+    const el = $(`#pressed-keys`);
+    el.style.display = 'inline-block';
+    el.querySelector('span').textContent = msg;
+
+    setTimeout(() => {
+      el.style.display = 'none';
+      onClose?.();
+    }, duration);
+  }
+
   function showPressedKeys(keys) {
     const keying = `<code id="pressed-keys" style="
   background: rgb(42 39 39 / 80%);
@@ -148,10 +160,11 @@
       showPressedKeys(pressedKeys);
 
       shortcuts.some((item) => {
-        const { key, cb } = item;
+        const { key, cb, desc } = item;
 
         if (key === comboKey) {
-          cb();
+          toast(desc, { onClose: cb });
+
           return true;
         }
       });
