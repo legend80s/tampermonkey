@@ -22,8 +22,8 @@
     time2Readable,
     onUrlChange,
     generateLabel,
-    // eslint-disable-next-line no-undef
     // @ts-expect-error
+    // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
   // @ts-expect-error
