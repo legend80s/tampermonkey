@@ -78,7 +78,7 @@
     bindShortcuts([
       {
         key: 'f',
-        desc: 'F to fullscreen',
+        desc: 'Full Screen',
         cb: () =>
           document
             .querySelector(`#player_fullscreen_no_mouseover_player`)
@@ -93,7 +93,6 @@
     ]);
   }
 
-  // find the item with timestamp - xxx
   function debounce(func, time) {
     let timer;
     return () => {
