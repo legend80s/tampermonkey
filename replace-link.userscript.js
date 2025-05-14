@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         替换 GitHub/Medium
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  replace github / medium links
 // @author       legend80s
 // @match        https://vite.dev
@@ -22,11 +22,12 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 2.1 支持 foo.medium.com
 // 2.0 支持 Medium
 // 1.2 add https://2ality.com/2025/02/typescript-esm-packages.html
 // 1.1 支持从多个github替换地址中选择一个速度最快的
 // 1.0 初始化
-(async function() {
+(async function () {
   'use strict';
 
   // Your code here...
@@ -45,10 +46,10 @@
 
   const { log } = createLoggers(GM_info);
 
-  main()
+  main();
 
   function main() {
-    init()
+    init();
 
     // onUrlChange(() => init())
   }
@@ -56,121 +57,135 @@
   async function init() {
     const begin = Date.now();
     // Code here
-    await replaceMedium()
+    await replaceMedium();
 
-    await replace()
-    await replace()
-    sleep(1000)
-    await replace()
+    await replace();
+    await replace();
+    sleep(1000);
+    await replace();
     //await replaceMedium()
 
-    log('🎉 耗时', time2Readable(begin, Date.now()))
+    log('🎉 耗时', time2Readable(begin, Date.now()));
   }
 
   async function replaceMedium() {
-    const github = `https://medium.com`
-    const s = `a[href^="${github}"]`
-    await $Async(s)
+    const github = `https://medium.com`; // or https://itsfuad.medium.com/understanding-server-sent-events-sse-with-node-js-3e881c533081
+    // 避免 fakemedium.com
+    const s = `a[href*=".medium.com/"],a[href*="//medium.com/"]`;
+    await $Async(s);
 
-    log('medium list:', document.querySelectorAll(s).length)
+    log('medium list 1:', s, document.querySelectorAll(s).length);
 
-    const list = [...document.querySelectorAll(s)].filter(x => {
-      return !x.__replaced // && !!x.textContent
-    })
-    log('medium list:', list.length)
+    const list = [...document.querySelectorAll(s)].filter((x) => {
+      return !x.__replaced; // && !!x.textContent
+    });
+    log('medium list 2:', list.length);
 
     for (const item of list) {
-      const { url, tips } = await genMedium(item.href)
+      const { url, tips } = await genMedium(item.href);
 
-      item.href = url
-      item.__replaced = true
+      item.href = url;
+      item.__replaced = true;
       // log('mark', item.textContent, item, item.__replaced)
-      item.title = (item.title || '') + url + ' ' + tips
-      item.insertAdjacentHTML('beforeEnd', `<span style="font-size: 68%;">${tips}</span>`)
+      item.title = (item.title || '') + url + ' ' + tips;
+      item.insertAdjacentHTML(
+        'beforeEnd',
+        `<span style="font-size: 68%;">${tips}</span>`
+      );
     }
   }
 
   async function replace() {
-    const github = `https://github.com`
-    const s = `a[href^="${github}"]`
-    await $Async(s)
+    const github = `https://github.com`;
+    const s = `a[href^="${github}"]`;
+    await $Async(s);
 
-    log('github list:', document.querySelectorAll(s).length)
-    const list = [...document.querySelectorAll(s)].filter(x => {
-      return !x.__replaced // && !!x.textContent
-    })
-    log('list:', list.length)
+    log('github list:', document.querySelectorAll(s).length);
+    const list = [...document.querySelectorAll(s)].filter((x) => {
+      return !x.__replaced; // && !!x.textContent
+    });
+    log('list:', list.length);
 
     for (const item of list) {
-      const { url, tips } = await replaceGithub(item.href)
+      const { url, tips } = await replaceGithub(item.href);
 
-      item.href = url
-      item.__replaced = true
+      item.href = url;
+      item.__replaced = true;
       // log('mark', item.textContent, item, item.__replaced)
-      item.title = (item.title || '') + url + ' ' + tips
-      item.insertAdjacentHTML('beforeEnd', `<span style="font-size: 68%;">${tips}</span>`)
+      item.title = (item.title || '') + url + ' ' + tips;
+      item.insertAdjacentHTML(
+        'beforeEnd',
+        `<span style="font-size: 68%;">${tips}</span>`
+      );
     }
   }
 
-  const isAccessible = isGithubAccessible(GM)
-  let latency = 0
+  const isAccessible = isGithubAccessible(GM);
+  let latency = 0;
 
-  const is200 = isSiteAccessible(GM)
+  const is200 = isSiteAccessible(GM);
 
   function getFastestReplacement(candidates) {
     /*     tampermonkeyUtils.gm = GM */
     // console.log(tampermonkeyUtils.gm)
-    const { resolve, reject, promise } = Promise.withResolvers()
-    const rejectedUrls = []
+    const { resolve, reject, promise } = Promise.withResolvers();
+    const rejectedUrls = [];
 
-    candidates.forEach(url => {
+    candidates.forEach((url) => {
       is200(url)
-        .then((yes) => yes ? resolve(url) : rejectedUrls.push(url))
-        .then(() => { rejectedUrls.length === candidates.length && reject({ rejectedUrls, msg: 'all urls tried but none is 200' }) })
-    })
+        .then((yes) => (yes ? resolve(url) : rejectedUrls.push(url)))
+        .then(() => {
+          rejectedUrls.length === candidates.length &&
+            reject({ rejectedUrls, msg: 'all urls tried but none is 200' });
+        });
+    });
 
-    setTimeout(() => { reject({ rejectedUrls, msg: 'timeout' }) }, 3000)
+    setTimeout(() => {
+      reject({ rejectedUrls, msg: 'timeout' });
+    }, 3000);
 
-    return promise
+    return promise;
   }
 
   async function genMedium(url) {
     // if we can detect if github is accessible
     // log(url)
-    const urlInstance = new URL(url)
+    const urlInstance = new URL(url);
 
-    if (urlInstance.hostname !== 'medium.com') { return { url, tips: '' } }
+    // if (urlInstance.hostname !== 'medium.com') { return { url, tips: '' } }
 
-    let final = ''
-    let icon = ''
+    let final = '';
+    let icon = '';
 
     //console.time('getFastestReplacement')
-    const fast = 'https://readmedium.com'
+    const fast = 'https://readmedium.com';
 
-    final = url.replace(urlInstance.origin, fast)
-    icon = 'Ⓜ️'
+    final = url.replace(urlInstance.origin, fast);
+    icon = 'Ⓜ️';
 
-    return { url: final, tips: icon }
+    return { url: final, tips: icon };
   }
 
   async function replaceGithub(url) {
     // if we can detect if github is accessible
     // log(url)
-    const urlInstance = new URL(url)
+    const urlInstance = new URL(url);
 
-    if (urlInstance.hostname !== 'github.com') { return { url, tips: '' } }
+    if (urlInstance.hostname !== 'github.com') {
+      return { url, tips: '' };
+    }
 
-    let final = ''
-    let icon = ''
+    let final = '';
+    let icon = '';
 
-    const start = Date.now()
+    const start = Date.now();
     //console.time('isGithubAccessible')
-    const accessible = await isAccessible({ timeout: 80 })
+    const accessible = await isAccessible({ timeout: 80 });
     //console.timeEnd('isGithubAccessible')
 
     if (accessible) {
-      final = url
-      icon = '🐙'
+      final = url;
+      icon = '🐙';
     } else {
       //console.time('getFastestReplacement')
       const fast = await getFastestReplacement([
@@ -178,20 +193,22 @@
         'https://git.homegu.com',
         // 'https://kkgithub.com',
         'https://hgithub.xyz',
-        'https://hub.whtrys.space'
-      ])
+        'https://hub.whtrys.space',
+      ]);
       //console.timeEnd('getFastestReplacement')
       //log({ fast })
 
-      final = url.replace(urlInstance.origin, fast)
-      icon = '♻️'
+      final = url.replace(urlInstance.origin, fast);
+      icon = '♻️';
     }
 
-    if (!latency) { latency = Date.now() - start }
+    if (!latency) {
+      latency = Date.now() - start;
+    }
     //log('end - start', end - start)
 
-    const cost = latency > 50 ? time2Readable(latency) : ''
+    const cost = latency > 50 ? time2Readable(latency) : '';
 
-    return { url: final, tips: icon + cost }
+    return { url: final, tips: icon + cost };
   }
 })();
