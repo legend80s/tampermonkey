@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         清爽的 CCTV
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  try to take over the world!
 // @author       孟陬
 // @match        https://tv.cctv.com/live/cctv*
@@ -10,6 +10,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.5 Prev ArrowDown to tune to next channel
 // 1.4 show toast before action
 // 1.3 use ␣ to represent space. uppercase single key.
 // 1.2 Show pressing keys in center of screen.
@@ -25,6 +26,7 @@
     createLoggers,
     time2Readable,
     getElementByText,
+    bindShortcuts,
     // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
@@ -75,6 +77,10 @@
       };
     });
 
+    const prev = '#jiemudan dl:has(+ dl.active) a'
+    const next = '#jiemudan dl.active + dl a'
+    const tvIcon = `<svg style="vertical-align: -5px;" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-tv-minimal-play-icon lucide-tv-minimal-play"><path d="M10 7.75a.75.75 0 0 1 1.142-.638l3.664 2.249a.75.75 0 0 1 0 1.278l-3.664 2.25a.75.75 0 0 1-1.142-.64z"/><path d="M7 21h10"/><rect width="20" height="14" x="2" y="3" rx="2"/></svg>`
+
     bindShortcuts([
       {
         key: 'f',
@@ -89,91 +95,38 @@
         desc: 'Play CCTV 5+',
         cb: () => getElementByText(/CCTV-5\+/, 'a').click(),
       },
+      {
+        key: 'ArrowDown',
+        desc: () => {
+          return {
+            content: `Next Channel ${tvIcon} ` + $(next).textContent,
+            // duration: 1000e3,
+          }
+        },
+        cb({ event }) { event.preventDefault(); $(next).click() },
+      },
+      {
+        key: 'ArrowUp',
+        desc: () => `Previous Channel ${tvIcon} ` + $(prev).textContent,
+        cb({ event }) { event.preventDefault(); $(prev).click() },
+      },
+      // $0.currentTime
+      {
+        key: 'ArrowRight',
+        desc: ({ nHits }) => `+${nHits * 5}s`,
+        cb({ nHits }) { $('video').currentTime += (5 * nHits) },
+      },
+      {
+        key: 'ArrowLeft',
+        desc: ({ nHits }) => `-${nHits * 5}s`,
+        cb({ nHits }) { $('video').currentTime -= (5 * nHits) },
+      },
+      {
+        key: 'm',
+        desc: () => (h5player_player.muted ? '🗣️ 取消' : '🤫 ') + '静音',
+        cb() { h5player_player.muted = !h5player_player.muted },
+      },
       ...cctvNumberSwitches,
     ]);
-  }
-
-  function debounce(func, time) {
-    let timer;
-    return () => {
-      timer && clearTimeout(timer);
-
-      timer = setTimeout(() => {
-        func();
-      }, time);
-    };
-  }
-
-  function toast(msg, { duration = 500, onClose } = {}) {
-    const el = $(`#pressed-keys`);
-    el.style.display = 'inline-block';
-    el.querySelector('span').textContent = msg;
-
-    setTimeout(() => {
-      el.style.display = 'none';
-      onClose?.();
-    }, duration);
-  }
-
-  function showPressedKeys(keys) {
-    const keying = `<code id="pressed-keys" style="
-  background: rgb(42 39 39 / 80%);
-  position: absolute;
-  top: 45vh;
-  left: 50%;
-  transform: translate(-50%);
-  z-index: 1000;
-  padding: 0.8rem 1.2rem;
-  border-radius: 0.5rem;
-  font-size: 140%;
-  color: white;
-  font-family: inherit;
-"><kbd style=" font-size: 120%; color: blue; margin-inline-end: 0.25em;">🖱️</kbd><span></span></code>`;
-
-    let el = $(`#pressed-keys`);
-
-    if (!el) {
-      $('body').insertAdjacentHTML('afterbegin', keying);
-      el = $(`#pressed-keys`);
-    }
-
-    if (!keys.length) {
-      el.style.display = 'none';
-    } else {
-      el.style.display = 'inline-block';
-      const text = keys
-        .map((k) => (k.length === 1 ? k.toUpperCase() : k))
-        .join(' ');
-      el.querySelector('span').textContent = text;
-    }
-  }
-
-  function bindShortcuts(shortcuts) {
-    console.log(shortcuts);
-    let pressedKeys = [];
-
-    const callComboKey = debounce(() => {
-      // console.log('pressedKeys', pressedKeys)
-      const comboKey = pressedKeys.join('');
-      pressedKeys = [];
-      showPressedKeys(pressedKeys);
-
-      shortcuts.some((item) => {
-        const { key, cb, desc } = item;
-
-        if (key === comboKey) {
-          toast(desc, { onClose: cb });
-
-          return true;
-        }
-      });
-    }, 400 * 1);
-
-    document.addEventListener('keydown', (event) => {
-      pressedKeys.push(event.key === ' ' ? '␣' : event.key);
-      showPressedKeys(pressedKeys);
-      // console.log('keydown', event, event.key, pressedKeys)
-      callComboKey();
-    });
   }
 })();
