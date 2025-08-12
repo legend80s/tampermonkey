@@ -11,10 +11,12 @@
 // @match        https://npmmirror.com/package/*
 // @match        https://4x-ant-design.antgroup.com/*
 // @match        https://ant-design.antgroup.com/*
-// @match        https://cn.bing.com/search?q=*
+// @match        https://cn.bing.com/search?*
 // @match        https://www.npmjs.com/package/*
 // @match        https://www.ruanyifeng.com/blog/*.html
 // @match        https://ant-design.antgroup.com/components/*
+// @match        https://www.typescriptlang.org/docs/*
+
 
 // @homepage     https://github.com/legend80s/tampermonkey/blob/master/replace-link.userscript.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=npmmirror.com
