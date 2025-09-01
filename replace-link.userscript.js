@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         替换 GitHub/Medium
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  replace github / medium links
 // @author       legend80s
 // @match        https://vite.dev
@@ -16,6 +16,8 @@
 // @match        https://www.ruanyifeng.com/blog/*.html
 // @match        https://ant-design.antgroup.com/components/*
 // @match        https://www.typescriptlang.org/docs/*
+// @match        https://reactrouter.com/*
+// @match        https://marketplace.visualstudio.com/*
 
 // @homepage     https://github.com/legend80s/tampermonkey/blob/master/replace-link.userscript.js
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=npmmirror.com
@@ -23,6 +25,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 2.2 支持替换 marketplace.visualstudio.com 内的 img 比如 https://marketplace.visualstudio.com/items?itemName=meganrogge.template-string-converter
 // 2.1 支持 foo.medium.com
 // 2.0 支持 Medium
 // 1.2 add https://2ality.com/2025/02/typescript-esm-packages.html
@@ -45,7 +48,14 @@
     // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
-  const { log } = createLoggers(GM_info);
+  const { log, warn, error } = createLoggers(GM_info);
+
+  const isAccessible = isGithubAccessible(GM);
+  let latency = 0;
+  const is200 = isSiteAccessible(GM);
+
+  const githubs = ['https://github.com', 'https://raw.githubusercontent.com'];
+  const targets = ['a.href', 'img.src'];
 
   main();
 
@@ -57,16 +67,20 @@
 
   async function init() {
     const begin = Date.now();
-    // Code here
-    await replaceMedium();
+    const getNow = (d = new Date()) =>
+      d.toLocaleTimeString() + d.toLocaleDateString();
 
-    await replace();
-    await replace();
+    log('Start at', getNow());
+    // Code here
+    replaceMedium();
+
+    await replaceGithub();
+    await replaceGithub();
     sleep(1000);
-    await replace();
+    await replaceGithub();
     //await replaceMedium()
 
-    log('🎉 耗时', time2Readable(begin, Date.now()));
+    log('End at', getNow(), '🎉 耗时', time2Readable(begin, Date.now()));
   }
 
   async function replaceMedium() {
@@ -75,12 +89,13 @@
     const s = `a[href*=".medium.com/"],a[href*="//medium.com/"]`;
     await $Async(s);
 
-    log('medium list 1:', s, document.querySelectorAll(s).length);
+    const matched = [...document.querySelectorAll(s)];
+    log('find', matched.length, 'medium links');
 
-    const list = [...document.querySelectorAll(s)].filter((x) => {
+    const list = matched.filter((x) => {
       return !x.__replaced; // && !!x.textContent
     });
-    log('medium list 2:', list.length);
+    // log('medium list 2:', list.length);
 
     for (const item of list) {
       const { url, tips } = await genMedium(item.href);
@@ -96,35 +111,66 @@
     }
   }
 
-  async function replace() {
-    const github = `https://github.com`;
-    const s = `a[href^="${github}"]`;
-    await $Async(s);
-
-    log('github list:', document.querySelectorAll(s).length);
-    const list = [...document.querySelectorAll(s)].filter((x) => {
-      return !x.__replaced; // && !!x.textContent
-    });
-    log('list:', list.length);
-
-    for (const item of list) {
-      const { url, tips } = await replaceGithub(item.href);
-
-      item.href = url;
-      item.__replaced = true;
-      // log('mark', item.textContent, item, item.__replaced)
-      item.title = (item.title || '') + url + ' ' + tips;
-      item.insertAdjacentHTML(
-        'beforeEnd',
-        `<span style="font-size: 68%;">${tips}</span>`
-      );
-    }
+  // https://raw.githubusercontent.com/meganrogge/template-string-converter/master/images/demo.gif
+  // 转成
+  // https://bgithub.xyz/meganrogge/template-string-converter/blob/master/images/demo.gif?raw=true
+  function convertGitHubUrlURL(url) {
+    const urlObj = new URL(url);
+    urlObj.hostname = 'bgithub.xyz';
+    urlObj.searchParams.set('raw', 'true');
+    return urlObj.toString();
   }
 
-  const isAccessible = isGithubAccessible(GM);
-  let latency = 0;
+  async function replaceGithub() {
+    // normalize for bing.com English search results 这里有个问题 只能挑战到 repo 根目录，无法进入 issue
+    // 因为 bing 页面并未提供 issue number
+    $$(`a[aria-label="Github"] .tpmeta`).forEach((meta) => {
+      const rawUrl = meta.textContent.replaceAll(' › ', '/');
+      meta.closest('a[aria-label="Github"]').setAttribute('href', rawUrl);
+    });
 
-  const is200 = isSiteAccessible(GM);
+    const result = targets
+      .map((str) => {
+        const [tag, attr] = str.split('.');
+        const s = githubs
+          .map((github) => `${tag}[${attr}^="${github}"]`)
+          .join(',');
+        log(s, document.querySelectorAll(s));
+
+        return [{ tag, attr }, [...document.querySelectorAll(s)]];
+      })
+      .filter((item) => item[1].length);
+
+    // log(s)
+    // await $Async(s);
+
+    const all = result.flatMap((x) => x[1]);
+
+    (all.length === 0 ? warn : log)(`find ${all.length} github links or imgs`);
+
+    for (const [{ tag, attr }, matched] of result) {
+      log(attr, 'mached:', matched.length);
+
+      const list = matched.filter((x) => {
+        return !x.__replaced; // && !!x.textContent
+      });
+
+      for (const item of list) {
+        // const attr = item.href ? 'href' : 'src'
+        const { url, tips } = await findGithub(item[attr]);
+
+        item[tag === 'a' ? 'href' : attr] = url;
+        item.__replaced = true;
+        tag === 'a ' && (item.target = `_blank`);
+        // log('mark', item.textContent, item, item.__replaced)
+        item.title = (item.title || '') + url + ' ' + tips;
+        item.insertAdjacentHTML(
+          'beforeEnd',
+          `<span style="font-size: 68%;">${tips}</span>`
+        );
+      }
+    }
+  }
 
   function getFastestReplacement(candidates) {
     /*     tampermonkeyUtils.gm = GM */
@@ -167,12 +213,21 @@
     return { url: final, tips: icon };
   }
 
-  async function replaceGithub(url) {
+  async function findGithub(rawUrl) {
+    let url = rawUrl;
     // if we can detect if github is accessible
     // log(url)
-    const urlInstance = new URL(url);
+    let urlInstance;
+    try {
+      urlInstance = new URL(url);
+    } catch (err) {
+      console.error('[findGithub] Bad url:', url);
+      console.error(err);
+      return { url, tips: '' };
+    }
 
-    if (urlInstance.hostname !== 'github.com') {
+    if (!githubs.includes(urlInstance.origin)) {
+      warn('not match github', url);
       return { url, tips: '' };
     }
 
@@ -190,9 +245,10 @@
     } else {
       //console.time('getFastestReplacement')
       const fast = await getFastestReplacement([
-        'https://dgithub.xyz',
+        'https://bgithub.xyz',
+        // 'https://dgithub.xyz',
         'https://git.homegu.com',
-        // 'https://kkgithub.com',
+        'https://kkgithub.com',
         'https://hgithub.xyz',
         'https://hub.whtrys.space',
       ]);
@@ -209,6 +265,18 @@
     //log('end - start', end - start)
 
     const cost = latency > 50 ? time2Readable(latency) : '';
+
+    if (rawUrl.startsWith(`https://raw.githubusercontent.com`)) {
+      // log('add raw') 注意这里只处理了 master 分支
+      const master = '/master/';
+      if (final.includes(master)) {
+        final = final.replace(master, '/blob/master/');
+      } else {
+        error('无法展示其他分支的 raw content');
+      }
+
+      final += (final.includes('?') ? '&' : '?') + 'raw=true';
+    }
 
     return { url: final, tips: icon + cost };
   }
