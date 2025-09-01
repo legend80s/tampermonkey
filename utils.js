@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.24.1
+// @version      1.26.0
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -12,13 +12,17 @@
 // @run-at       document-start
 // @grant        GM_addElement
 // @grant        GM_info
-// @grant        GM_setClipboard
 
 // @noxxxframesx    有些网站运行在inframe 里面故不能增加该 annotation
 
 // ==/UserScript==
 
 // CHANGELOG
+// 1.27.0 Add `observeResource` / `observerRequest` / `observeErrorRequest`
+// 1.26.0 Add `throttle`
+// 1.25.1 fix GM_setClipboard is not defined
+// 1.25.0 add `objToStyle`
+// 1.24.2 fix cannot read fire of undefined
 // 1.24.1 fix cdn url
 // 1.24.0 add debounce/isSiteAccessible/fetchHttpStatus
 // 1.23.0 add `powerfulQuerySelectorAll`
@@ -71,6 +75,10 @@
     countWordDescend: ${countWordDescend.toString()},
     compareVersion: ${compareVersion.toString()},
     debounce: ${debounce.toString()},
+    throttle: ${throttle.toString()},
+    observeResource: ${observeResource.toString()},
+    observeRequest: ${observeRequest.toString()},
+    observeErrorRequest: ${observeErrorRequest.toString()},
 
     copy,
     toast,
@@ -135,6 +143,7 @@
     findNearestOperationBtn: ${findNearestOperationBtn.toString()},
 
     toLink: ${toLink.toString()},
+    objToStyle: ${objToStyle.toString()},
 
     onUrlChange: ${onUrlChange.toString()},
     sum: ${sum.toString()},
@@ -237,7 +246,7 @@
     const seconds = duration / 1000
     const min = seconds / 60;
 
-    const text = min >= 1 ? minutes2Readable(min) : \`\${seconds} 秒\`;
+    const text = min >= 1 ? minutes2Readable(min) : \`\${seconds.toFixed(2)} 秒\`;
 
     return text;
   }
@@ -257,7 +266,7 @@
 
   function seconds(n) { return n * 1000 }
 
-  function createLoggers(GM_info) {
+  function createLoggers(GM_info, { debug = true } = {}) {
     const label = generateLabel(GM_info);
 
     const levels = ['log', 'info', 'warn', 'error']
@@ -267,6 +276,7 @@
         ...acc,
 
         [level]: (...args) => {
+          if (!debug) { return }
           const time = now()
 
           return console[level](label, time, ...args)
@@ -378,7 +388,7 @@
   }
 
   function copy(text) {
-    GM_setClipboard(text)
+    return navigator.clipboard.writeText(text)
   }
 
   function fire(...args) {
@@ -387,7 +397,7 @@
 
   function toast(msg, { position = 'center', title = '', level = 'success', timeout = 3 * 1000 } = {}) {
     // https://sweetalert2.github.io/
-    window.Swal.fire({
+    window.Swal?.fire({
       timer: timeout,
       timerProgressBar: false,
       background: '#000000c7',
@@ -611,15 +621,60 @@
     return [];
   }
 
-  function debounce(func, delay) {
+  function debounce(func, delay = 0) {
     let timer;
-    return (...args) => {
+    return function debounced(...args) {
       if (timer) clearTimeout(timer)
 
       timer = setTimeout(() => {
-        func(...args)
+        func.apply(this, args)
       }, delay)
     }
+  }
+
+  function throttle(func, delay = 0) {
+    let lastTime = 0;
+
+    return (...args) => {
+      const ellapsed = Date.now() - lastTime
+
+      if (ellapsed >= delay) {
+        func.apply(this, args)
+        lastTime = Date.now()
+      }
+    }
+  }
+
+  function observeResource({ when = () => true, callback, buffered = true }) {
+    const observer = new PerformanceObserver((list) => {
+      list.getEntries().forEach((perfEntry) => {
+        const entry = perfEntry // as PerformanceResourceTiming;
+
+        if (when(entry)) {
+          callback(entry)
+        }
+      });
+    });
+
+    observer.observe({ type: 'resource', buffered });
+
+    return () => {
+      observer.disconnect()
+    }
+  }
+
+  function observeRequest(props) {
+    tampermonkeyUtils.observeResource({
+      when: ({ initiatorType }) => (initiatorType === 'fetch' || initiatorType === 'xmlhttprequest'),
+      ...props,
+    })
+  }
+
+  function observeErrorRequest(props) {
+    return tampermonkeyUtils.observeResource({
+      when: ({ responseStatus, initiatorType }) => responseStatus >= 400 && (initiatorType === 'fetch' || initiatorType === 'xmlhttprequest'),
+      ...props,
+    })
   }
 
   function getElementByText(...args) {
@@ -766,8 +821,15 @@
     return 0;
   };
 
-  function toLink(url, text = url, { style = '', cls='' } = {}) {
-    return `<a target="_blank" ${cls && 'class="' + cls + '"'} href="${url}"${ style ? 'style="'+style+'"' : '' }>${text} 🔥🐒</a>`
+  function objToStyle(obj) {
+    return Object.keys(obj).map(key => key + ': ' + obj[key]).join('; ')
+  }
+
+  function toLink(url, text = url, { style = {}, ...flatProps } = {}) {
+    const styleStr = tampermonkeyUtils.objToStyle(style)
+    const flatPropsStr = Object.keys(flatProps).map((key) => (key + '="' + flatProps[key] + '"')).join(' ')
+
+    return `<a target="_blank" ${flatPropsStr} href="${url}"${ styleStr ? 'style="'+styleStr+'"' : '' }>${text}</a>`
   }
 
   function merge(target, src, { prefix = 'lodash__', postfix = '' } = {}) {
@@ -795,8 +857,8 @@
   }
 
   /*   const log = console.log;*/
-  function onChildChanged(root = '#app', { predicate = () => true, cb, config, debounceTime }) {
-    const { debounce } = tampermonkeyUtils;
+  function onChildChanged(root = '#app', { predicate = () => true, cb, config, debounceTime, throttleTime }) {
+    const { debounce, throttle, $ } = tampermonkeyUtils;
     const defaultConfig = {
       childList: true, // observe direct children
       subtree: true, // and lower descendants too
@@ -805,7 +867,7 @@
 
     config ??= defaultConfig
 
-    const deCb = debounceTime ? debounce(cb, debounceTime) : cb
+    const deCb = debounceTime ? debounce(cb, debounceTime) : throttleTime ? throttle(cb, throttleTime) :cb
 
     const observer = new MutationObserver(mutationRecords => {
       // console.log('observe mutationRecords:', mutationRecords);
@@ -817,7 +879,7 @@
     });
     // log(`observe $('${root}')`, $(root));
     // observe everything except attributes
-    observer.observe(tampermonkeyUtils.$(root), config);
+    observer.observe(typeof root === 'string' ? $(root) : root, config);
   }
 
   function getFirstCommitUrl() {
