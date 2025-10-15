@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.26.0
+// @version      1.28.0
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -18,6 +18,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.28.0 控制台安装包提示安装了哪一个包，以及如果存在可以通过参数强制覆盖安装，增加 emoji
 // 1.27.0 Add `observeResource` / `observerRequest` / `observeErrorRequest`
 // 1.26.0 Add `throttle`
 // 1.25.1 fix GM_setClipboard is not defined
@@ -41,11 +42,10 @@
 // 1.10.0 find what javascript variables are leaking into the global scope
 // 1.9.0 install package in your console
 
-(async function () {
-  'use strict';
-  const { name: appName, version } = GM_info.script;
+;(async () => {
+  const { name: appName, version } = GM_info.script
 
-  const label = `${appName}@${version} >`;
+  const label = `${appName}@${version} >`
 
   // console.log(label, 'working', Date.now());
 
@@ -117,6 +117,7 @@
     // --- github utils end ---
 
     findVariablesLeakingIntoGlobalScope: ${findVariablesLeakingIntoGlobalScope.toString()},
+    getVariablesLeakingIntoGlobalScope: ${getVariablesLeakingIntoGlobalScope.toString()},
 
     ___npmInstallInBrowser: ${___npmInstallInBrowser.toString()},
     ___npmDownload: ${___npmDownload.toString()},
@@ -469,7 +470,7 @@
 
   ;(${emitUrlChangeEventWhenLinkClicked.toString()})(window.history);
   ;(${emitUrlChangeEventWhenForwardOrBackBtnClicked.toString()})(window);
-  `;
+  `
 
   /**
    * @param {string} text
@@ -484,145 +485,164 @@
   GM_addElement('script', {
     src: 'https://cdn.jsdmirror.com/npm/sweetalert2@11.14.3',
     // src: 'https://cdn.jsdelivr.net/npm/sweetalert2@11',
-  });
+  })
 
   // console.log('scriptContent', scriptContent)
 
   GM_addElement('script', {
     textContent: wrapInIIFE(scriptContent),
-  });
+  })
 
   // --- function declarations ---
 
   /** 点击连接导致的url change */
   function emitUrlChangeEventWhenLinkClicked(history) {
-    const pushState = history.pushState;
-    const eventName = 'tampermonkey-utils:pushState';
+    const pushState = history.pushState
+    const eventName = 'tampermonkey-utils:pushState'
 
     // console.log('event: intercept pushState');
 
-    history.pushState = function (state, _, targetPath) {
+    history.pushState = (state, _, targetPath) => {
       // console.log("pushState targetPath:", targetPath);
 
-      const urlChangedDelay = 300;
+      const urlChangedDelay = 300
 
       setTimeout(() => {
         // console.log('event: send');
-        document.body.dispatchEvent(new CustomEvent(eventName, { bubbles: true, detail: { targetPath } }));
-      }, urlChangedDelay);
+        document.body.dispatchEvent(
+          new CustomEvent(eventName, { bubbles: true, detail: { targetPath } }),
+        )
+      }, urlChangedDelay)
 
-      const result = pushState.apply(history, arguments);
+      const result = pushState.apply(history, arguments)
 
-      return result;
+      return result
     }
   }
 
   function emitUrlChangeEventWhenForwardOrBackBtnClicked(window) {
-    window.addEventListener('popstate', function(event) {
+    window.addEventListener('popstate', event => {
       //console.log('浏览器的返回或前进按钮被点击了', event);
 
-      const urlChangedDelay = 300;
-      const eventName = 'tampermonkey-utils:pushState';
+      const urlChangedDelay = 300
+      const eventName = 'tampermonkey-utils:pushState'
 
       setTimeout(() => {
-        const targetPath = location.href;
+        const targetPath = location.href
         //console.log('event: send', targetPath);
-        document.body.dispatchEvent(new CustomEvent(eventName, { bubbles: true, detail: { targetPath } }));
-      }, urlChangedDelay);
+        document.body.dispatchEvent(
+          new CustomEvent(eventName, { bubbles: true, detail: { targetPath } }),
+        )
+      }, urlChangedDelay)
 
       // 在这里执行需要的逻辑，比如页面内容的更新等
-    });
+    })
   }
 
   function sum(...args) {
-    return args.reduce((acc, count) => acc + count, 0);
+    return args.reduce((acc, count) => acc + count, 0)
   }
   function mean(...args) {
-    const { sum } = window.tampermonkeyUtils;
+    const { sum } = window.tampermonkeyUtils
 
     return sum(...args) / args.length
   }
 
   function onUrlChange(cb) {
-    const eventName = 'tampermonkey-utils:pushState';
+    const eventName = 'tampermonkey-utils:pushState'
 
-    const listener = (e) => {
+    const listener = e => {
       // console.log('event: rx', e);
 
       cb(e.detail.targetPath)
-    };
+    }
 
-    document.body.addEventListener(eventName, listener);
+    document.body.addEventListener(eventName, listener)
 
     return () => {
-      document.body.removeEventListener(eventName, listener);
+      document.body.removeEventListener(eventName, listener)
     }
   }
 
   async function getElementAsync(selector, { visible = true } = {}) {
-    const { $$, loop } = window.tampermonkeyUtils;
+    const { $$, loop } = window.tampermonkeyUtils
 
     return loop(() => {
       const elements = $$(selector)
 
-      const isValid = (el) => visible ? el && el.getBoundingClientRect().width > 0 : el
+      const isValid = el => (visible ? el && el.getBoundingClientRect().width > 0 : el)
 
       return elements.find(el => isValid(el))
     })
   }
 
   async function loop(getter, { interval = 500, times = 10 } = {}) {
-    const { $, sleep, ___error: error, ___warn: warn, time2Readable } = window.tampermonkeyUtils;
+    const { $, sleep, ___error: error, ___warn: warn, time2Readable } = window.tampermonkeyUtils
 
-    let i;
+    let i
     for (i = 0; i < times; i++) {
-      const el = getter(i);
+      const el = getter(i)
       // console.log('i =', i)
 
-      if (el) { return el }
-      await sleep(500);
+      if (el) {
+        return el
+      }
+      await sleep(500)
     }
 
-    warn('No valid result resolved after', i, `retries in ${time2Readable(i * 500)}`);
-    return undefined;
+    warn('No valid result resolved after', i, `retries in ${time2Readable(i * 500)}`)
+    return undefined
   }
 
   async function getElementByTextAsync(text, selector, opts = {}) {
-    const { ___error: error, ___warn: warn, ready, getElementByText, sleep } = window.tampermonkeyUtils;
+    const {
+      ___error: error,
+      ___warn: warn,
+      ready,
+      getElementByText,
+      sleep,
+    } = window.tampermonkeyUtils
     const { timeout = 0, silent = false, interval = 500, ...rest } = opts
     const start = Date.now()
 
-    await ready(selector);
+    await ready(selector)
 
-    let i = 0;
+    let i = 0
     for (i = 0; i < 10; i++) {
-      const el = getElementByText(text, selector, rest);
+      const el = getElementByText(text, selector, rest)
       // console.log('i =', i)
       if (timeout && Date.now() - start >= timeout) {
-        !silent && warn('No element', { text, selector }, 'find after', i, 'tries in', timeout, 'ms');
+        !silent &&
+          warn('No element', { text, selector }, 'find after', i, 'tries in', timeout, 'ms')
         return undefined
       }
 
-      if (el) { return el }
-      await sleep(interval);
+      if (el) {
+        return el
+      }
+      await sleep(interval)
     }
 
-    !silent && warn('No element', { text, selector }, 'find after', i, 'tries in 5s');
-    return undefined;
+    !silent && warn('No element', { text, selector }, 'find after', i, 'tries in 5s')
+    return undefined
   }
 
   async function listElementsByTextAsync(texts, selector, ...args) {
-    const { ___error: error, getElementByTextAsync } = window.tampermonkeyUtils;
+    const { ___error: error, getElementByTextAsync } = window.tampermonkeyUtils
 
-    const elements = (await Promise.all(texts.map((text) => getElementByTextAsync(text, selector, ...args)))).filter(Boolean)
-    if (elements.length) { return elements }
+    const elements = (
+      await Promise.all(texts.map(text => getElementByTextAsync(text, selector, ...args)))
+    ).filter(Boolean)
+    if (elements.length) {
+      return elements
+    }
 
-    error('No elements', { texts, selector }, 'find');
-    return [];
+    error('No elements', { texts, selector }, 'find')
+    return []
   }
 
   function debounce(func, delay = 0) {
-    let timer;
+    let timer
     return function debounced(...args) {
       if (timer) clearTimeout(timer)
 
@@ -633,7 +653,7 @@
   }
 
   function throttle(func, delay = 0) {
-    let lastTime = 0;
+    let lastTime = 0
 
     return (...args) => {
       const ellapsed = Date.now() - lastTime
@@ -646,17 +666,17 @@
   }
 
   function observeResource({ when = () => true, callback, buffered = true }) {
-    const observer = new PerformanceObserver((list) => {
-      list.getEntries().forEach((perfEntry) => {
+    const observer = new PerformanceObserver(list => {
+      list.getEntries().forEach(perfEntry => {
         const entry = perfEntry // as PerformanceResourceTiming;
 
         if (when(entry)) {
           callback(entry)
         }
-      });
-    });
+      })
+    })
 
-    observer.observe({ type: 'resource', buffered });
+    observer.observe({ type: 'resource', buffered })
 
     return () => {
       observer.disconnect()
@@ -665,37 +685,46 @@
 
   function observeRequest(props) {
     tampermonkeyUtils.observeResource({
-      when: ({ initiatorType }) => (initiatorType === 'fetch' || initiatorType === 'xmlhttprequest'),
+      when: ({ initiatorType }) => initiatorType === 'fetch' || initiatorType === 'xmlhttprequest',
       ...props,
     })
   }
 
   function observeErrorRequest(props) {
     return tampermonkeyUtils.observeResource({
-      when: ({ responseStatus, initiatorType }) => responseStatus >= 400 && (initiatorType === 'fetch' || initiatorType === 'xmlhttprequest'),
+      when: ({ responseStatus, initiatorType }) =>
+        responseStatus >= 400 && (initiatorType === 'fetch' || initiatorType === 'xmlhttprequest'),
       ...props,
     })
   }
 
   function getElementByText(...args) {
-    return tampermonkeyUtils.findElementsByText(...args)[0];
+    return tampermonkeyUtils.findElementsByText(...args)[0]
   }
   function findElementsByTextAsync(text, selector) {
-    return tampermonkeyUtils.findElementsByText(text, selector, { async: true });
+    return tampermonkeyUtils.findElementsByText(text, selector, { async: true })
   }
-  function findElementsByText(text, selector, { directParent = false, parent = document, visible = true, async = false } = {}) {
-    const { ___error: error, ready } = window.tampermonkeyUtils;
+  function findElementsByText(
+    text,
+    selector,
+    { directParent = false, parent = document, visible = true, async = false } = {},
+  ) {
+    const { ___error: error, ready } = window.tampermonkeyUtils
 
-    if (!text || !selector) { error(`[invalid params] text and selector required`); return [] }
+    if (!text || !selector) {
+      error(`[invalid params] text and selector required`)
+      return []
+    }
 
     function isDirectParentOfText(e) {
       return e.childNodes.length === 1 && e.firstChild.nodeName === '#text'
     }
 
     /** @type {(content: string) => boolean} */
-    const isTextMathed = text instanceof RegExp ? content => text.test(content) : content => text === content;
+    const isTextMathed =
+      text instanceof RegExp ? content => text.test(content) : content => text === content
 
-    const predicate = (el) => {
+    const predicate = el => {
       // btn not visible when e.getBoundingClientRect().width === 0
       const visibleByUser = visible ? !!el.getBoundingClientRect().width : true
       const common = visibleByUser && isTextMathed(el.textContent.trim())
@@ -708,36 +737,43 @@
     }
 
     const query = () => {
-      const candidates = [...parent.querySelectorAll(selector)];
+      const candidates = [...parent.querySelectorAll(selector)]
 
-      return candidates.filter(predicate);
+      return candidates.filter(predicate)
     }
 
     if (async) {
-      return ready(selector).then(query);
+      return ready(selector).then(query)
     }
 
-    return query();
+    return query()
   }
 
   /** Find the nearest active button in the current operation area. */
   function findNearestOperationBtn(textOrRegexp, selector) {
-    const { ___error: error, getElementByText } = window.tampermonkeyUtils;
+    const { ___error: error, getElementByText } = window.tampermonkeyUtils
 
-    let parent = document.activeElement.parentElement;
-    let i = 1;
+    let parent = document.activeElement.parentElement
+    let i = 1
 
-    const activeBtnSelector = selector.includes(':not([disabled])') ? selector : `${selector}:not([disabled])`;
-    let target;
+    const activeBtnSelector = selector.includes(':not([disabled])')
+      ? selector
+      : `${selector}:not([disabled])`
+    let target
 
     while (parent && !(target = getElementByText(textOrRegexp, activeBtnSelector, { parent }))) {
-      i++;
+      i++
       parent = parent.parentElement
     }
 
-    i >= 15 && error('try find activeBtn in document.activeElement\'s parentElement', i, 'times, but not found');
+    i >= 15 &&
+      error(
+        "try find activeBtn in document.activeElement's parentElement",
+        i,
+        'times, but not found',
+      )
 
-    return target;
+    return target
   }
 
   function powerfulQuerySelector(selector) {
@@ -745,16 +781,16 @@
     const matches = selector.match(/(.+)?\[text=(.+)+\]/)
 
     if (!matches) {
-      return document.querySelector(selector);
+      return document.querySelector(selector)
     }
 
-    let [_, tag, textOrRegexp] = matches;
+    let [_, tag, textOrRegexp] = matches
     // console.log({ tag, textOrRegexp })
 
-    const regMatches = textOrRegexp.match(new RegExp(String.raw`/(.+)?/(\w*)`))
+    const regMatches = textOrRegexp.match(/\/(.+)?\/(\w*)/)
 
     if (regMatches) {
-      const [_, pattern, flags] = regMatches;
+      const [_, pattern, flags] = regMatches
       // console.log({ pattern, flags })
       textOrRegexp = new RegExp(pattern, flags)
     }
@@ -770,13 +806,13 @@
       return [...document.querySelectorAll(selector)]
     }
 
-    let [_, tag, textOrRegexp] = matches;
+    let [_, tag, textOrRegexp] = matches
     // console.log({ tag, textOrRegexp })
 
-    const regMatches = textOrRegexp.match(new RegExp(String.raw`/(.+)?/(\w*)`))
+    const regMatches = textOrRegexp.match(/\/(.+)?\/(\w*)/)
 
     if (regMatches) {
-      const [_, pattern, flags] = regMatches;
+      const [_, pattern, flags] = regMatches
       // console.log({ pattern, flags })
       textOrRegexp = new RegExp(pattern, flags)
     }
@@ -784,81 +820,94 @@
     return tampermonkeyUtils.findElementsByText(textOrRegexp, tag)
   }
 
-  function isFunction(val) { return typeof val === 'function' }
-  function isString(val) { return typeof val === 'string' }
-  function isArray(val) { return Array.isArray(val); }
+  function isFunction(val) {
+    return typeof val === 'function'
+  }
+  function isString(val) {
+    return typeof val === 'string'
+  }
+  function isArray(val) {
+    return Array.isArray(val)
+  }
 
   function countWordDescend(text, { lang = 'zh-hans' } = {}) {
     const segmenter = new Intl.Segmenter(lang, { granularity: 'word' })
 
     return Object.entries(
       [...segmenter.segment(text)]
-      .filter(x => x.isWordLike)
-      .map(x => x.segment)
-      .reduce((acc, w) => {
-        acc[w] = (acc[w] || 0) + 1;
-        return acc
-      }, Object.create(null))
+        .filter(x => x.isWordLike)
+        .map(x => x.segment)
+        .reduce((acc, w) => {
+          acc[w] = (acc[w] || 0) + 1
+          return acc
+        }, Object.create(null)),
     ).sort((a, b) => b[1] - a[1])
   }
 
   /** 版本号对比 */
   function compareVersion(v1, v2) {
-    const v1Arr = v1.split('.');
-    const v2Arr = v2.split('.');
-    const len = Math.max(v1Arr.length, v2Arr.length);
+    const v1Arr = v1.split('.')
+    const v2Arr = v2.split('.')
+    const len = Math.max(v1Arr.length, v2Arr.length)
 
     for (let i = 0; i < len; i++) {
-      const num1 = parseInt(v1Arr[i] || '0', 10);
-      const num2 = parseInt(v2Arr[i] || '0', 10);
+      const num1 = parseInt(v1Arr[i] || '0', 10)
+      const num2 = parseInt(v2Arr[i] || '0', 10)
 
       if (num1 > num2) {
-        return 1;
+        return 1
       } else if (num1 < num2) {
-        return -1;
+        return -1
       }
     }
-    return 0;
-  };
+    return 0
+  }
 
   function objToStyle(obj) {
-    return Object.keys(obj).map(key => key + ': ' + obj[key]).join('; ')
+    return Object.keys(obj)
+      .map(key => key + ': ' + obj[key])
+      .join('; ')
   }
 
   function toLink(url, text = url, { style = {}, ...flatProps } = {}) {
     const styleStr = tampermonkeyUtils.objToStyle(style)
-    const flatPropsStr = Object.keys(flatProps).map((key) => (key + '="' + flatProps[key] + '"')).join(' ')
+    const flatPropsStr = Object.keys(flatProps)
+      .map(key => key + '="' + flatProps[key] + '"')
+      .join(' ')
 
-    return `<a target="_blank" ${flatPropsStr} href="${url}"${ styleStr ? 'style="'+styleStr+'"' : '' }>${text}</a>`
+    return `<a target="_blank" ${flatPropsStr} href="${url}"${styleStr ? 'style="' + styleStr + '"' : ''}>${text}</a>`
   }
 
   function merge(target, src, { prefix = 'lodash__', postfix = '' } = {}) {
-    const { ___error: error } = tampermonkeyUtils;
+    const { ___error: error } = tampermonkeyUtils
 
-    const keys = Object.keys(src);
-    const total = keys.length;
+    const keys = Object.keys(src)
+    const total = keys.length
     const result = { total, conflicted: 0, merged: 0 }
 
-    keys.forEach((key) => {
-      const newKey = `${prefix}${key}${postfix}`;
+    keys.forEach(key => {
+      const newKey = `${prefix}${key}${postfix}`
       // console.log('newKey', newKey)
 
       if (target[newKey] !== undefined) {
-        result.conflicted += 1;
-        error('Merge Conflicts: key exists in target object. key=', newKey, 'value=', target[key]);
+        result.conflicted += 1
+        error('Merge Conflicts: key exists in target object. key=', newKey, 'value=', target[key])
       } else {
-        target[newKey] = src[key];
+        target[newKey] = src[key]
       }
-    });
+    })
 
-    result.merged = total - result.conflicted;
+    result.merged = total - result.conflicted
 
-    return result;
+    return result
   }
 
   /*   const log = console.log;*/
-  function onChildChanged(root = '#app', { predicate = () => true, cb, config, debounceTime, throttleTime }) {
-    const { debounce, throttle, $ } = tampermonkeyUtils;
+  function onChildChanged(
+    root = '#app',
+    { predicate = () => true, cb, config, debounceTime, throttleTime },
+  ) {
+    const { debounce, throttle, $ } = tampermonkeyUtils
     const defaultConfig = {
       childList: true, // observe direct children
       subtree: true, // and lower descendants too
@@ -867,42 +916,52 @@
 
     config ??= defaultConfig
 
-    const deCb = debounceTime ? debounce(cb, debounceTime) : throttleTime ? throttle(cb, throttleTime) :cb
+    const deCb = debounceTime
+      ? debounce(cb, debounceTime)
+      : throttleTime
+        ? throttle(cb, throttleTime)
+        : cb
 
     const observer = new MutationObserver(mutationRecords => {
       // console.log('observe mutationRecords:', mutationRecords);
       const mutation = mutationRecords.find(({ target }) => {
-        return predicate(target);
-      });
+        return predicate(target)
+      })
 
-      if (mutation) { deCb(mutation.target) }
-    });
+      if (mutation) {
+        deCb(mutation.target)
+      }
+    })
     // log(`observe $('${root}')`, $(root));
     // observe everything except attributes
-    observer.observe(typeof root === 'string' ? $(root) : root, config);
+    observer.observe(typeof root === 'string' ? $(root) : root, config)
   }
 
   function getFirstCommitUrl() {
     // get the last commit and extract the url
-    return tampermonkeyUtils.getFirstCommit()
-      .then(commits => { console.log('[getFirstCommitUrl] commits', commits); return commits; })
+    return tampermonkeyUtils
+      .getFirstCommit()
+      .then(commits => {
+        console.log('[getFirstCommitUrl] commits', commits)
+        return commits
+      })
       .then(commits => commits.pop().html_url)
   }
 
   function getRepoId() {
-    const repoId = location.pathname.match(/\/([\w\-]+\/[\w\-]+).*/)[1]
+    const repoId = location.pathname.match(/\/([\w-]+\/[\w-]+).*/)[1]
 
-    return repoId;
+    return repoId
   }
 
   function isGithubAccessible(GM) {
-    const detect = tampermonkeyUtils.isSiteAccessible(GM);
+    const detect = tampermonkeyUtils.isSiteAccessible(GM)
 
-    return (opts) => detect(`https://github.com`, opts)
+    return opts => detect(`https://github.com`, opts)
   }
 
   function isSiteAccessible(GM) {
-    const fetchHttpStatus = tampermonkeyUtils.fetchHttpStatus(GM);
+    const fetchHttpStatus = tampermonkeyUtils.fetchHttpStatus(GM)
 
     return async (url, opts) => {
       const res = await fetchHttpStatus(url, opts)
@@ -912,8 +971,8 @@
   }
 
   function fetchHttpStatus(GM) {
-    let promise = {}
-    let count = 0
+    const promise = {}
+    const count = 0
     return async (url, { timeout = 3000 } = {}) => {
       // console.log('promise', promise)
 
@@ -928,10 +987,10 @@
           //console.log(resp);
           return { status: resp.status }
         })
-        .catch((err) => {
+        .catch(err => {
           // console.error('Oops!', err)
           return { error: err }
-        });
+        })
 
       return promise[url]
     }
@@ -943,37 +1002,39 @@
     // args[1] is the `orgname/repo` url fragment
     // args[2] is the optional branch or hash
     // will respond all the commits `https://api.github.com/repos/egoist/dum/commits?sha=`
-    const sha = '';
+    const sha = ''
 
-    return fetch('https://api.github.com/repos/' + repoId + '/commits?sha=' + sha)
-    // the link header has additional urls for paging
-    // parse the original JSON for the case where no other pages exist
-      .then(res => Promise.all([res.headers.get('link'), res.json()]))
+    return (
+      fetch('https://api.github.com/repos/' + repoId + '/commits?sha=' + sha)
+        // the link header has additional urls for paging
+        // parse the original JSON for the case where no other pages exist
+        .then(res => Promise.all([res.headers.get('link'), res.json()]))
 
-    // get last page of commits
-      .then(results => {
-      // results[0] is the link
-      // results[1] is the first page of commits
+        // get last page of commits
+        .then(results => {
+          // results[0] is the link
+          // results[1] is the first page of commits
 
-      if (results[0]) {
-        // the link contains two urls in the form
-        // <https://github.com/...>; rel=blah, <https://github.com/...>; rel=thelastpage
-        // split the url out of the string
-        var pageurl = results[0].split(',')[1].split(';')[0].slice(2, -1);
-        // fetch the last page
-        return fetch(pageurl).then(res => res.json());
-      }
+          if (results[0]) {
+            // the link contains two urls in the form
+            // <https://github.com/...>; rel=blah, <https://github.com/...>; rel=thelastpage
+            // split the url out of the string
+            var pageurl = results[0].split(',')[1].split(';')[0].slice(2, -1)
+            // fetch the last page
+            return fetch(pageurl).then(res => res.json())
+          }
 
-      // if no link, we know we're on the only page
-      return results[1];
-    })
+          // if no link, we know we're on the only page
+          return results[1]
+        })
+    )
   }
 
   async function requestPackageJson() {
-    const hostname = location.hostname;
-    const { request } = tampermonkeyUtils;
+    const hostname = location.hostname
+    const { request } = tampermonkeyUtils
 
-    const repoId = location.pathname.match(/\/([\w\-]+\/[\w\-]+).*/)[1]
+    const repoId = location.pathname.match(/\/([\w-]+\/[\w-]+).*/)[1]
 
     const url = `https://${hostname}/${repoId}/raw/master/package.json`
 
@@ -981,125 +1042,168 @@
 
     return await request(url)
   }
-
-  // https://mmazzarolo.com/blog/2022-02-14-find-what-javascript-variables-are-leaking-into-the-global-scope/
   function findVariablesLeakingIntoGlobalScope() {
+    const runtimeGlobals = getVariablesLeakingIntoGlobalScope()
+    console.log(
+      'Runtime globals: count',
+      runtimeGlobals.length,
+      runtimeGlobals.map(key => {
+        return { key, value: window[key] }
+      }),
+    )
+  }
+  // https://mmazzarolo.com/blog/2022-02-14-find-what-javascript-variables-are-leaking-into-the-global-scope/
+  function getVariablesLeakingIntoGlobalScope() {
     // Grab browser's default global variables.
-    const iframe = window.document.createElement("iframe");
+    const iframe = window.document.createElement('iframe')
 
-    iframe.src = "about:blank";
+    iframe.src = 'about:blank'
 
-    window.document.body.appendChild(iframe);
+    window.document.body.appendChild(iframe)
 
-    const browserGlobals = Object.keys(iframe.contentWindow);
+    const browserGlobals = Object.keys(iframe.contentWindow)
 
-    window.document.body.removeChild(iframe);
+    window.document.body.removeChild(iframe)
 
     // Get the global variables added at runtime by filtering out the browser's
     // default global variables from the current window object.
-    const runtimeGlobals = Object.keys(window).filter((key) => {
-      const isFromBrowser = browserGlobals.includes(key);
+    const runtimeGlobals = Object.keys(window).filter(key => {
+      const isFromBrowser = browserGlobals.includes(key)
 
-      return !isFromBrowser;
-    });
+      return !isFromBrowser
+    })
 
-    console.log("Runtime globals: count", runtimeGlobals.length, runtimeGlobals.map(key => {
-      return { key, value: window[key] }
-    }));
-  };
+    return runtimeGlobals
+  }
 
   /** use tampermonkeyUtils.install instead */
   function ___npmDownload(src, originName, info, successCallback, errorCallback) {
-    const { ___log: log } = tampermonkeyUtils;
-    log(`'${originName}' installing...`);
+    const { ___log: log } = tampermonkeyUtils
+    log(`📦 '${originName}' installing ⏳...`)
 
-    const successTimerLabel = `📂 '${originName}' installed success costs`
-    const failedTimerLabel = `🔒 '${originName}' installed failed`
+    const successTimerLabel = `  📦 '${originName}' installed success ✅ costs ⏱️`
+    const failedTimerLabel = `  📦 '${originName}' installed failed 😱 costs ⏱️`
 
-    console.time(successTimerLabel);
-    console.time(failedTimerLabel);
+    console.time(successTimerLabel)
+    console.time(failedTimerLabel)
 
-    const npmInstallScript = document.createElement('script');
+    const npmInstallScript = document.createElement('script')
 
-    info?.type === 'module' && npmInstallScript.setAttribute('type', 'module');
+    info?.type === 'module' && npmInstallScript.setAttribute('type', 'module')
+    npmInstallScript.setAttribute(
+      'id',
+      ['tampermonkey-utils-npm-install', originName, Date.now()].join('-'),
+    )
 
-    npmInstallScript.src = src;
+    npmInstallScript.src = src
 
     // npmInstallScript.setAttribute('crossorigin', '');
 
-    npmInstallScript.onload = (resp) => {
+    npmInstallScript.onload = resp => {
       console.timeEnd(successTimerLabel)
-      successCallback(resp);
-    };
+      successCallback(resp)
+    }
 
-    npmInstallScript.onerror = (error) => {
+    npmInstallScript.onerror = error => {
       console.timeEnd(failedTimerLabel)
-      errorCallback(error);
-    };
+      errorCallback(error)
+    }
 
-    document.body.appendChild(npmInstallScript);
-    document.body.removeChild(npmInstallScript);
+    document.body.appendChild(npmInstallScript)
+    npmInstallScript.remove()
   }
 
   /** use tampermonkeyUtils.install instead */
   async function ___npmInstallInBrowser(name, info, successCallback, errorCallback) {
-    const { ___npmDownload: npmDownload, ___fetchUnpkgCdn: fetchUnpkgCdn, ___log: log } = tampermonkeyUtils;
+    const {
+      ___npmDownload: npmDownload,
+      ___fetchUnpkgCdn: fetchUnpkgCdn,
+      ___log: log,
+    } = tampermonkeyUtils
 
-    const originName = name.trim();
+    const originName = name.trim()
     // console.log(originName);
 
     if (/^https?:\/\//.test(originName)) {
-      npmDownload(originName, originName, info, successCallback, errorCallback);
+      npmDownload(originName, originName, info, successCallback, errorCallback)
     } else {
-      const endpoint = await fetchUnpkgCdn(originName);
-      log('install script', endpoint)
+      const endpoint = await fetchUnpkgCdn(originName)
+      log('📦 install script', endpoint)
 
-      npmDownload(endpoint, originName, info, successCallback, errorCallback);
+      npmDownload(endpoint, originName, info, successCallback, errorCallback)
     }
   }
 
   async function ___fetchUnpkgCdn(name) {
-    const url = `https://unpkg.com/${name}`;
+    const url = `https://unpkg.com/${name}`
 
-    const resp = await fetch(url);
+    const resp = await fetch(url)
 
-    return resp.url;
+    return resp.url
   }
 
   /**
    * Install js package in your console.
    * @param {string} name npm package name or github url
-   * @param {{type?: 'module'}} info
+   * @param {{type?: 'module', force?: boolean }} info
    * @returns {Promise<boolean>}
+   * @example
+   * install('lodash')
+   * install('lodash@4.17.15')
+   *
    */
-  async function install(name, info) {
-    const { ___log: log, ___error: error, ___npmInstallInBrowser: npmInstallInBrowser } = tampermonkeyUtils;
+  async function install(name, info = {}) {
+    const {
+      ___log: log,
+      ___error: error,
+      ___npmInstallInBrowser: npmInstallInBrowser,
+      getVariablesLeakingIntoGlobalScope,
+    } = tampermonkeyUtils
+    const { type, force } = info
 
     if (name === 'lodash') {
-      const _ = window._;
+      const _ = window._
 
       // console.log(typeof _ === 'function' , typeof _.flowRight === 'function', typeof _.VERSION === 'string')
 
-      if (typeof _ === 'function' && typeof _.flowRight === 'function' && typeof _.VERSION === 'string') {
-        log(`lodash@${_.VERSION} has been installed already`);
-        return true;
+      if (
+        typeof _ === 'function' &&
+        typeof _.flowRight === 'function' &&
+        typeof _.VERSION === 'string'
+      ) {
+        log(`📦 lodash@${_.VERSION} has been installed already`)
+        if (!force) return true
       }
     }
 
     if (!name) {
-      error('invalid params: missing package name or url');
-      return false;
+      error('📦 invalid params: missing package name or url')
+      return false
     }
 
-    if (info?.type !== 'module' && info?.type !== undefined) {
-      error("invalid params: type must be 'module'");
-      return false;
+    if (!(type === 'module' || type === undefined)) {
+      error("📦 invalid params: type must be undefined or 'module'")
+      return false
+    }
+
+    // figure out what installed in global scope
+    const globalsBefore = new Set(getVariablesLeakingIntoGlobalScope())
+
+    const { promise, resolve, reject } = Promise.withResolvers()
+
+    const success = (...args) => {
+      const globalsAfter = new Set(getVariablesLeakingIntoGlobalScope())
+      const added = [...globalsAfter.difference(globalsBefore)]
+      console.assert(added.length === 1)
+      // console.log('added', added)
+      log('📦 Try input', `\`${added[0]}\``, 'in the console.')
+
+      resolve(...args)
     }
 
     try {
-      await new Promise((resolve, reject) => {
-        npmInstallInBrowser(name, info, resolve, reject);
-      });
+      npmInstallInBrowser(name, info, success, reject)
+      await promise
 
       return true
     } catch (err) {
@@ -1107,4 +1211,4 @@
       return false
     }
   }
-})();
+})()
