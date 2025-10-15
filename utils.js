@@ -1243,9 +1243,14 @@
     const success = () => {
       const globalsAfter = new Set(getVariablesLeakingIntoGlobalScope())
       const added = [...globalsAfter.difference(globalsBefore)]
-      added.length !== 1 && warn(label, 'Should be only one global variable installed', added)
+      if (info.force) {
+        console.assert(added.length === 0)
+      } else {
+        added.length !== 1 && warn(label, 'Should be only one global variable installed', added)
+      }
+
       // console.log('added', added)
-      log(label, 'Try input', `\`${added.at(-1)}\``, 'in the console.')
+      added.length && log(label, 'Try input', `\`${added.at(-1)}\``, 'in the console.')
     }
 
     try {
