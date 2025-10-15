@@ -1078,8 +1078,8 @@
     const label = '📦'
     log(label, `'${originName}' installing ⏳...`)
 
-    const successTimerLabel = `  ${label} '${originName}' installed success ✅ costs ⏱️`
-    const failedTimerLabel = `  ${label} '${originName}' installed failed 😱 costs ⏱️`
+    const successTimerLabel = `✅ '${originName}' installed success costs ⏱️`
+    const failedTimerLabel = `‼️ '${originName}' installed failed costs ⏱️`
 
     console.time(successTimerLabel)
     console.time(failedTimerLabel)
@@ -1177,6 +1177,8 @@
 
   async function __fetchUnpkgCdn(name) {
     const url = `https://unpkg.com/${name}`
+
+    return url
 
     const resp = await fetch(url)
 
