@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.28.0
+// @version      1.28.1
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -18,6 +18,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.28.1 修复 bing.com 无法安装包问题。原因：覆写了 document.body.appendChild 设置了白名单导致无法插入 script
 // 1.28.0 控制台安装包提示安装了哪一个包，以及如果存在可以通过参数强制覆盖安装，增加 emoji
 // 1.27.0 Add `observeResource` / `observerRequest` / `observeErrorRequest`
 // 1.26.0 Add `throttle`
@@ -43,6 +44,7 @@
 // 1.9.0 install package in your console
 
 ;(async () => {
+  // oxlint-disable no-unused-expressions
   const { name: appName, version } = GM_info.script
 
   const label = `${appName}@${version} >`
@@ -58,9 +60,9 @@
   // const $ = (selector) => document.querySelector(selector);
   // const $$ = selectors => [...document.querySelectorAll(selectors)];
   const tampermonkeyUtils = {
-    ___error: error,
-    ___log: log,
-    ___warn: warn,
+    __error: error,
+    __log: log,
+    __warn: warn,
 
     $: ${powerfulQuerySelector.toString()},
     $$: ${powerfulQuerySelectorAll.toString()},
@@ -119,9 +121,9 @@
     findVariablesLeakingIntoGlobalScope: ${findVariablesLeakingIntoGlobalScope.toString()},
     getVariablesLeakingIntoGlobalScope: ${getVariablesLeakingIntoGlobalScope.toString()},
 
-    ___npmInstallInBrowser: ${___npmInstallInBrowser.toString()},
-    ___npmDownload: ${___npmDownload.toString()},
-    ___fetchUnpkgCdn: ${___fetchUnpkgCdn.toString()},
+    __npmInstallInBrowser: ${__npmInstallInBrowser.toString()},
+    __npmDownload: ${__npmDownload.toString()},
+    __fetchUnpkgCdn: ${__fetchUnpkgCdn.toString()},
 
     install: ${install.toString()},
 
@@ -577,7 +579,7 @@
   }
 
   async function loop(getter, { interval = 500, times = 10 } = {}) {
-    const { $, sleep, ___error: error, ___warn: warn, time2Readable } = window.tampermonkeyUtils
+    const { $, sleep, __error: error, __warn: warn, time2Readable } = window.tampermonkeyUtils
 
     let i
     for (i = 0; i < times; i++) {
@@ -595,13 +597,7 @@
   }
 
   async function getElementByTextAsync(text, selector, opts = {}) {
-    const {
-      ___error: error,
-      ___warn: warn,
-      ready,
-      getElementByText,
-      sleep,
-    } = window.tampermonkeyUtils
+    const { __warn: warn, ready, getElementByText, sleep } = window.tampermonkeyUtils
     const { timeout = 0, silent = false, interval = 500, ...rest } = opts
     const start = Date.now()
 
@@ -628,7 +624,7 @@
   }
 
   async function listElementsByTextAsync(texts, selector, ...args) {
-    const { ___error: error, getElementByTextAsync } = window.tampermonkeyUtils
+    const { __error: error, getElementByTextAsync } = window.tampermonkeyUtils
 
     const elements = (
       await Promise.all(texts.map(text => getElementByTextAsync(text, selector, ...args)))
@@ -709,7 +705,7 @@
     selector,
     { directParent = false, parent = document, visible = true, async = false } = {},
   ) {
-    const { ___error: error, ready } = window.tampermonkeyUtils
+    const { __error: error, ready } = window.tampermonkeyUtils
 
     if (!text || !selector) {
       error(`[invalid params] text and selector required`)
@@ -751,7 +747,7 @@
 
   /** Find the nearest active button in the current operation area. */
   function findNearestOperationBtn(textOrRegexp, selector) {
-    const { ___error: error, getElementByText } = window.tampermonkeyUtils
+    const { __error: error, getElementByText } = window.tampermonkeyUtils
 
     let parent = document.activeElement.parentElement
     let i = 1
@@ -879,7 +875,7 @@
   }
 
   function merge(target, src, { prefix = 'lodash__', postfix = '' } = {}) {
-    const { ___error: error } = tampermonkeyUtils
+    const { __error: error } = tampermonkeyUtils
 
     const keys = Object.keys(src)
     const total = keys.length
@@ -1077,12 +1073,13 @@
   }
 
   /** use tampermonkeyUtils.install instead */
-  function ___npmDownload(src, originName, info, successCallback, errorCallback) {
-    const { ___log: log } = tampermonkeyUtils
-    log(`📦 '${originName}' installing ⏳...`)
+  function __npmDownload(src, { originName, info, successCallback, errorCallback, beforeInsert }) {
+    const { __log: log, __warn: warn } = tampermonkeyUtils
+    const label = '📦'
+    log(label, `'${originName}' installing ⏳...`)
 
-    const successTimerLabel = `  📦 '${originName}' installed success ✅ costs ⏱️`
-    const failedTimerLabel = `  📦 '${originName}' installed failed 😱 costs ⏱️`
+    const successTimerLabel = `  ${label} '${originName}' installed success ✅ costs ⏱️`
+    const failedTimerLabel = `  ${label} '${originName}' installed failed 😱 costs ⏱️`
 
     console.time(successTimerLabel)
     console.time(failedTimerLabel)
@@ -1090,10 +1087,8 @@
     const npmInstallScript = document.createElement('script')
 
     info?.type === 'module' && npmInstallScript.setAttribute('type', 'module')
-    npmInstallScript.setAttribute(
-      'id',
-      ['tampermonkey-utils-npm-install', originName, Date.now()].join('-'),
-    )
+    const id = ['tampermonkey-utils-npm-install', originName, Date.now()].join('-')
+    npmInstallScript.setAttribute('id', id)
 
     npmInstallScript.src = src
 
@@ -1109,32 +1104,79 @@
       errorCallback(error)
     }
 
-    document.body.appendChild(npmInstallScript)
-    npmInstallScript.remove()
+    /** func passed in should not be bound otherwise the result is always true */
+    const isNativeCode = func => {
+      // console.log('func:', func)
+      // console.log('func?.toString():', func?.toString())
+      return func?.toString().includes('[native code]')
+    }
+
+    // bing.com 会拦截非本 hostname 的 script 标签的插入，我们需要找到一个原生的插入方法
+    const candidates = ['appendChild', 'append']
+    const insertFactory = op => document.body[op].bind(document.body)
+    let nativeOperation = candidates.find(op => isNativeCode(document.body[op]))
+    // console.log('nativeOperation:', nativeOperation)
+
+    if (!nativeOperation) {
+      warn(
+        label,
+        'insert method not found in',
+        candidates,
+        'but the installment is still trying to insert.',
+      )
+
+      nativeOperation = candidates[0]
+    }
+
+    beforeInsert()
+    const insert = insertFactory(nativeOperation)
+    insert(npmInstallScript)
+
+    try {
+      if (!document.querySelector(`#${id}`)) {
+        // console.error(new Error('Failed to insert script'))
+        throw new Error('Failed to insert script')
+      }
+    } finally {
+      npmInstallScript.remove()
+    }
   }
 
   /** use tampermonkeyUtils.install instead */
-  async function ___npmInstallInBrowser(name, info, successCallback, errorCallback) {
+  async function __npmInstallInBrowser(name, { info, beforeInsert }) {
     const {
-      ___npmDownload: npmDownload,
-      ___fetchUnpkgCdn: fetchUnpkgCdn,
-      ___log: log,
+      __npmDownload: npmDownload,
+      __fetchUnpkgCdn: fetchUnpkgCdn,
+      __log: log,
     } = tampermonkeyUtils
+    const label = '📦'
 
     const originName = name.trim()
     // console.log(originName);
 
+    const { promise, resolve, reject } = Promise.withResolvers()
+
+    const options = {
+      originName,
+      info,
+      successCallback: resolve,
+      errorCallback: reject,
+      beforeInsert,
+    }
+
     if (/^https?:\/\//.test(originName)) {
-      npmDownload(originName, originName, info, successCallback, errorCallback)
+      npmDownload(originName, options)
     } else {
       const endpoint = await fetchUnpkgCdn(originName)
-      log('📦 install script', endpoint)
+      log(label, 'install script', endpoint)
 
-      npmDownload(endpoint, originName, info, successCallback, errorCallback)
+      npmDownload(endpoint, options)
     }
+
+    return promise
   }
 
-  async function ___fetchUnpkgCdn(name) {
+  async function __fetchUnpkgCdn(name) {
     const url = `https://unpkg.com/${name}`
 
     const resp = await fetch(url)
@@ -1154,12 +1196,15 @@
    */
   async function install(name, info = {}) {
     const {
-      ___log: log,
-      ___error: error,
-      ___npmInstallInBrowser: npmInstallInBrowser,
+      __log: log,
+      __error: error,
+      __warn: warn,
+      __npmInstallInBrowser: npmInstallInBrowser,
       getVariablesLeakingIntoGlobalScope,
     } = tampermonkeyUtils
     const { type, force } = info
+
+    const label = '📦'
 
     if (name === 'lodash') {
       const _ = window._
@@ -1171,43 +1216,45 @@
         typeof _.flowRight === 'function' &&
         typeof _.VERSION === 'string'
       ) {
-        log(`📦 lodash@${_.VERSION} has been installed already`)
+        log(
+          label,
+          `lodash@${_.VERSION} has been installed already. Enable \`force\` option to reinstall.`,
+        )
         if (!force) return true
       }
     }
 
     if (!name) {
-      error('📦 invalid params: missing package name or url')
+      error(label, 'invalid params: missing package name or url')
       return false
     }
 
     if (!(type === 'module' || type === undefined)) {
-      error("📦 invalid params: type must be undefined or 'module'")
+      error(label, "invalid params: type must be undefined or 'module'")
       return false
     }
 
     // figure out what installed in global scope
-    const globalsBefore = new Set(getVariablesLeakingIntoGlobalScope())
+    let globalsBefore
+    const beforeInsert = () => {
+      globalsBefore = new Set(getVariablesLeakingIntoGlobalScope())
+    }
 
-    const { promise, resolve, reject } = Promise.withResolvers()
-
-    const success = (...args) => {
+    const success = () => {
       const globalsAfter = new Set(getVariablesLeakingIntoGlobalScope())
       const added = [...globalsAfter.difference(globalsBefore)]
-      console.assert(added.length === 1)
+      added.length !== 1 && warn(label, 'Should be only one global variable installed', added)
       // console.log('added', added)
-      log('📦 Try input', `\`${added[0]}\``, 'in the console.')
-
-      resolve(...args)
+      log(label, 'Try input', `\`${added.at(-1)}\``, 'in the console.')
     }
 
     try {
-      npmInstallInBrowser(name, info, success, reject)
-      await promise
+      await npmInstallInBrowser(name, { info, beforeInsert })
+      success()
 
       return true
     } catch (err) {
-      error(err)
+      error(label, err)
       return false
     }
   }
