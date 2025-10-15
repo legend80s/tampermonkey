@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.28.1
+// @version      1.28.2
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -1086,7 +1086,6 @@
 
     const npmInstallScript = document.createElement('script')
 
-    info?.type === 'module' && npmInstallScript.setAttribute('type', 'module')
     const id = ['tampermonkey-utils-npm-install', originName, Date.now()].join('-')
     npmInstallScript.setAttribute('id', id)
 
@@ -1187,7 +1186,7 @@
   /**
    * Install js package in your console.
    * @param {string} name npm package name or github url
-   * @param {{type?: 'module', force?: boolean }} info
+   * @param {{ force?: boolean }} info
    * @returns {Promise<boolean>}
    * @example
    * install('lodash')
@@ -1202,7 +1201,7 @@
       __npmInstallInBrowser: npmInstallInBrowser,
       getVariablesLeakingIntoGlobalScope,
     } = tampermonkeyUtils
-    const { type, force } = info
+    const { force } = info
 
     const label = '📦'
 
@@ -1226,11 +1225,6 @@
 
     if (!name) {
       error(label, 'invalid params: missing package name or url')
-      return false
-    }
-
-    if (!(type === 'module' || type === undefined)) {
-      error(label, "invalid params: type must be undefined or 'module'")
       return false
     }
 
