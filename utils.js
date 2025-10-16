@@ -516,7 +516,7 @@
         )
       }, urlChangedDelay)
 
-      const result = pushState.apply(history, arguments)
+      const result = pushState.apply(history, [state, _, targetPath])
 
       return result
     }
@@ -1086,7 +1086,11 @@
 
     const npmInstallScript = document.createElement('script')
 
-    const id = ['tampermonkey-utils-npm-install', originName, Date.now()].join('-')
+    const id = [
+      'tampermonkey-utils-npm-install',
+      originName.replaceAll('@', '-').replaceAll('.', '-'),
+      Date.now(),
+    ].join('-')
     npmInstallScript.setAttribute('id', id)
 
     npmInstallScript.src = src
