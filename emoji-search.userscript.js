@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emoji Search
 // @namespace    http://tampermonkey.net/
-// @version      2.0.0
+// @version      2.1.0
 // @description  try to take over the world!
 // @author       You
 // @match        https://emojisearch.fun/*
@@ -43,7 +43,8 @@
     observeNetworkError(
       {
         initiatorType: 'fetch',
-        name: 'https://emojisearch.fun/api/completion?query=',
+        name: /api\S+query/,
+        // name: 'https://emojisearch.fun/api/completion?query=',
       },
       debounce(findEmojiFromKimi, 100),
     )
@@ -56,6 +57,11 @@
     addChatSettings()
   }
 
+  /**
+   *
+   * @param {{ initiatorType: string, name: RegExp }} param0
+   * @param {(performanceEntry: PerformanceResourceTiming) => void} cb
+   */
   function observeNetworkError({ initiatorType, name }, cb) {
     const observer = new PerformanceObserver(list => {
       list.getEntries().forEach(entry => {
@@ -66,8 +72,11 @@
         // @ts-expect-error
         if (entry.responseStatus >= 400) {
           // console.error('网络请求错误:', entry.name, '状态码:', entry.responseStatus);
-          if (entryInitiatorType === initiatorType && entry.name.includes(name)) {
-            cb(entry)
+          if (entryInitiatorType === initiatorType && name.test(entry.name)) {
+            cb(
+              // @ts-expect-error https://github.com/microsoft/TypeScript/issues/58644
+              entry,
+            )
           }
         }
       })
@@ -99,10 +108,10 @@
   }
 
   async function findEmojiFromKimi() {
-    // console.log(Date.now())
+    console.log('[findEmojiFromKimi]', Date.now(), 'api failed fallback to findEmojiFromKimi')
     const params = new URLSearchParams(location.search)
     const q = params.get('q')
-    const label = '⏳ chat ' + q
+    const label = `[findEmojiFromKimi] ⏳ chat ${q}`
 
     console.time(label)
 
