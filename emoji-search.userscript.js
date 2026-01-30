@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emoji Search
 // @namespace    http://tampermonkey.net/
-// @version      2.1.0
+// @version      2.2.0
 // @description  try to take over the world!
 // @author       You
 // @match        https://emojisearch.fun/*
@@ -37,21 +37,96 @@
   const log = (...args) => debugging && console.log(label, ...args)
   const logError = (...args) => debugging && console.error(label, ...args)
 
+  // Exponential backoff state for original API attempts
+  let _backoffCurrent = 2
+  const _backoffMax = 16
+  let _skipRemaining = 0 // number of upcoming requests that should use Kimi directly
+  let _consecutiveFailures = 0
+
+  function _onOriginalSuccess() {
+    _consecutiveFailures = 0
+    _backoffCurrent = 2
+    _skipRemaining = 0
+    log('[backoff] original recovered — reset backoff')
+  }
+
+  function _onOriginalError(entry) {
+    // If this is the first failure in the sequence, set skip to current backoff (2)
+    if (_consecutiveFailures === 0) {
+      _consecutiveFailures = 1
+      _backoffCurrent = 2
+      _skipRemaining = _backoffCurrent
+      log('[backoff] first error — skip next', _skipRemaining, 'requests')
+      return
+    }
+
+    // If we already had failures and we just attempted original again and it failed,
+    // increase the backoff and set skip accordingly
+    _consecutiveFailures++
+    // cycle back to 2 after reaching max
+    if (_backoffCurrent >= _backoffMax) {
+      _backoffCurrent = 2
+    } else {
+      _backoffCurrent = Math.min(_backoffCurrent * 2, _backoffMax)
+    }
+    _skipRemaining = _backoffCurrent
+    log('[backoff] original still failing — increase skip to', _skipRemaining)
+  }
+  // No fetch monkey-patch: rely on observeNetworkError to detect original API failures
+  // and use `_skipRemaining` + form submit interception to proactively use Kimi when needed.
+
   main()
 
   async function main() {
+    // observe both success and failure entries for the original api so we can update backoff state
     observeNetworkError(
       {
         initiatorType: 'fetch',
-        name: /api\S+query/,
-        // name: 'https://emojisearch.fun/api/completion?query=',
+        // match name as `https://emojisearch.fun/api/completion?query=`
+        name: /api\S+query/, // match the original emoji api requests
       },
-      debounce(findEmojiFromKimi, 100),
+      debounce(entry => {
+        try {
+          if (entry.responseStatus >= 400) {
+            _onOriginalError(entry)
+            // trigger fallback UI for the failing request
+            findEmojiFromKimi()
+          } else {
+            _onOriginalSuccess()
+          }
+        } catch (e) {
+          logError(e)
+        }
+      }, 100),
     )
 
-    $('form').addEventListener('submit', () => {
-      // console.log('submit', $('#fallback-from-kimi'))
+    $('form').addEventListener('submit', event => {
       $('#fallback-from-kimi')?.remove()
+
+      /** @type {SubmitEvent} */
+      const e = event
+
+      // If we're in skip window, proactively use Kimi and avoid relying on original API
+      if (_skipRemaining > 0) {
+        // prevent the page from doing the original request if possible
+        try {
+          log('stop original API request, use Kimi directly 🚀')
+          e.preventDefault()
+          e.stopImmediatePropagation()
+          e.stopPropagation()
+        } catch (err) {}
+        _skipRemaining--
+        log('[form] proactive fallback to Kimi — skipRemaining=', _skipRemaining)
+        // update url search params `q` to the value of the search input but not trigger navigation or reload
+        const q = $('form input').value
+        const url = new URL(window.location.href)
+        // 设置新的 search params
+        url.searchParams.set('q', q)
+        // 更新 URL 而不刷新页面
+        window.history.pushState({}, '', url)
+
+        findEmojiFromKimi()
+      }
     })
 
     addChatSettings()
@@ -69,15 +144,13 @@
         // @ts-expect-error
         const entryInitiatorType = entry.initiatorType
 
+        // Call callback for all matching entries so caller can decide success/failure
         // @ts-expect-error
-        if (entry.responseStatus >= 400) {
-          // console.error('网络请求错误:', entry.name, '状态码:', entry.responseStatus);
-          if (entryInitiatorType === initiatorType && name.test(entry.name)) {
-            cb(
-              // @ts-expect-error https://github.com/microsoft/TypeScript/issues/58644
-              entry,
-            )
-          }
+        if (entryInitiatorType === initiatorType && name.test(entry.name)) {
+          cb(
+            // @ts-expect-error https://github.com/microsoft/TypeScript/issues/58644
+            entry,
+          )
         }
       })
     })
@@ -216,10 +289,16 @@
       //       return JSON.parse(
       //         str.replaceAll('""', `"`).match(/```json(.*)```/s)?.[1] || '[]'
       //       );
-      return str.split('|').map(pair => {
-        const [emoji, desc] = pair.split(':')
-        return { emoji, desc }
-      })
+      return (
+        str
+          .split('|')
+          .map(pair => {
+            const [emoji, desc] = pair.split(':')
+            return { emoji, desc }
+          })
+          // 防止返回不符合规范的 emoji 比如只有 desc 或 emoji
+          .filter(item => item.emoji && item.desc)
+      )
     } catch (error) {
       console.error('str:', str)
       // console.error('str:', str, ', match', str.match(/```json(.*)```/s));
