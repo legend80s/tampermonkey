@@ -15,7 +15,7 @@
   const { $$ } = tampermonkeyUtils
 
   const fastProxies = [`https://gh-proxy.com/`, `https://gh.webspeedx.eu.org/`]
-  fastProxies.every(url => console.assert(url.endsWith("/")))
+  fastProxies.every(url => console.assert(url.endsWith('/')))
 
   const fastProxy = await getFastestSuccessfulRequest(fastProxies)
   // console.log(1, 'fastProxy', { fastProxy })
@@ -29,9 +29,9 @@
   function prefixFastProxy(links) {
     // console.log('links', links)
     links.forEach(a => {
-      a.target = "_blank"
-      a.href = fastProxy + a.href.replace(a.hostname, "github.com")
-      a.textContent += " 🚀"
+      a.target = '_blank'
+      a.href = fastProxy + a.href.replace(a.hostname, 'github.com')
+      a.textContent += ' 🚀'
     })
   }
 
@@ -39,7 +39,7 @@
   const start = Date.now()
 
   const observer = new PerformanceObserver(list => {
-    const entries = list.getEntriesByType("resource")
+    const entries = list.getEntriesByType('resource')
     activeRequests = entries.filter(
       entry => !entry.responseEnd, // 未完成的请求
     )
@@ -53,15 +53,15 @@
     }
   })
 
-  observer.observe({ type: "resource", buffered: true })
+  observer.observe({ type: 'resource', buffered: true })
 
   // Your code here...
 
   async function getFastestSuccessfulRequest(urls) {
-    console.time("getFastestSuccessfulRequest costs")
+    console.time('getFastestSuccessfulRequest costs')
     const fast = await Promise.any(
       urls.map(url =>
-        fetch(url, { method: "head" }).then(resp => {
+        fetch(url, { method: 'head' }).then(resp => {
           if (resp.status !== 200) {
             throw resp
           }
@@ -70,7 +70,7 @@
         }),
       ),
     )
-    console.timeEnd("getFastestSuccessfulRequest costs")
+    console.timeEnd('getFastestSuccessfulRequest costs')
     // console.log(fast)
 
     return fast.url
