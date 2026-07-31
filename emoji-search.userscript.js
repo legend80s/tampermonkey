@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emoji Search
 // @namespace    http://tampermonkey.net/
-// @version      2.2.0
+// @version      2.3.0
 // @description  try to take over the world!
 // @author       You
 // @match        https://emojisearch.fun/*
@@ -13,6 +13,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 2.3.0 修复同步获取 form 报错，设置弹窗增加高斯模糊和 border-radius 等美化
 // 2.0.0 改写提示词，优化性能，从16s到8s
 // 1.0.0 如果请求报错则使用 kimi 兜底
 
@@ -100,7 +101,10 @@
       }, 100),
     )
 
-    $('form').addEventListener('submit', event => {
+    const form = await $Async('form')
+    document.getElementsByClassName(`sm:mt-60`)[0].style.marginTop = `5rem`
+
+    form.addEventListener('submit', event => {
       $('#fallback-from-kimi')?.remove()
 
       /** @type {SubmitEvent} */
@@ -456,9 +460,9 @@
     </button>
 
     <!-- Modal 遮罩层 -->
-    <div id="modalOverlay" class="fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center" style="z-index: 1;">
+    <div id="modalOverlay" class="fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center" style="z-index: 1;backdrop-filter: blur(0.15rem);">
         <!-- Modal 内容 -->
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700 shadow-xl">
+        <div class="bg-gray-800x rounded-lg p-6 w-full max-w-md border border-gray-700 shadow-xl" style="background: lightyellow; border-radius: 0.75rem;">
             <h2 class="text-xl font-bold mb-4 text-gray-100">设置</h2>
 
             <form id="settingsForm" class="space-y-4">
@@ -477,11 +481,11 @@
                 </div>
 
                 <div class="flex justify-end space-x-3 pt-2">
-                    <button type="button" id="cancelBtn"
+                    <button type="button" id="cancelBtn" style="cursor: pointer; border: 0.1rem solid; border-radius: 0.5rem;"
                             class="px-4 py-2 border border-gray-600 rounded-md text-gray-300 hover:bg-gray-700">
                         取消
                     </button>
-                    <button type="submit"
+                    <button type="submit" style="cursor: pointer;"
                             class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500">
                         确认
                     </button>
