@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Emoji Search
 // @namespace    http://tampermonkey.net/
-// @version      2.3.0
+// @version      2.3.1
 // @description  try to take over the world!
 // @author       You
 // @match        https://emojisearch.fun/*
@@ -13,6 +13,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 2.3.1 弹窗样式美化
 // 2.3.0 修复同步获取 form 报错，设置弹窗增加高斯模糊和 border-radius 等美化
 // 2.0.0 改写提示词，优化性能，从16s到8s
 // 1.0.0 如果请求报错则使用 kimi 兜底
@@ -163,7 +164,7 @@
   }
 
   function createErrorAndSpinning() {
-    const errorMsgElement = $Text(/Something's not right/, 'p')
+    const errorMsgElement = $('.text-red-500')
     const kimiLogo = `<img src="//statics.moonshot.cn/kimi-web-seo/assets/kimi-last-DFL4Por3.png" style=" width: 1em; display: inline-block; margin-inline: 0.25em;" />`
 
     let timer
@@ -205,8 +206,8 @@
       // { "error_type": "auth.token.invalid", "message": "您的授权已过期，请重新登录", "detail": "该用户的授权已过期，请重新登录" } authorization null
       const showError = msg => setErrorMessage(errorMsgElement, msg || 'Unknown Error')
       const errorHandlers = {
-        'chat.not_found': error => showError(error.message + '。请点击右上角 ⚙️ 设置必须信息'),
-        'auth.token.invalid': error => showError(error.message + '。请点击右上角 ⚙️ 设置必须信息'),
+        'chat.not_found': error => showError(error.message + '。请点击右上角 ⚙️ 设置'),
+        'auth.token.invalid': error => showError(error.message + '。请点击右上角 ⚙️ 设置'),
         default: error => showError(error.message),
       }
       const handler = errorHandlers[chatError.error_type] || errorHandlers.default
@@ -455,7 +456,11 @@
 }
     </style>
 
-    <button id="settingsBtn" class="fixed top-4 right-4 p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition text-gray-200" style="top:1rem; right:1rem;">
+    <button
+      id="settingsBtn"
+      class="fixed top-4 right-4 p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition text-gray-200"
+      style="cursor: pointer; top:1rem; right:1rem;"
+    >
         ⚙️
     </button>
 
@@ -463,19 +468,19 @@
     <div id="modalOverlay" class="fixed inset-0 bg-black bg-opacity-70 hidden flex items-center justify-center" style="z-index: 1;backdrop-filter: blur(0.15rem);">
         <!-- Modal 内容 -->
         <div class="bg-gray-800x rounded-lg p-6 w-full max-w-md border border-gray-700 shadow-xl" style="background: lightyellow; border-radius: 0.75rem;">
-            <h2 class="text-xl font-bold mb-4 text-gray-100">设置</h2>
+            <!-- <h2 class="text-xl font-bold mb-4 text-gray-100">设置</h2> -->
 
             <form id="settingsForm" class="space-y-4">
                 <div>
                     <label for="chatId" class="block text-sm font-medium text-gray-300">Chat Id</label>
-                    <input style="color: fieldtext" value="${chatId}" type="text" id="chatId" name="chatId"
+                    <input style="font-family: consolas; padding-inline: 0.25em; margin-top: 0.25em;" value="${chatId}" type="text" id="chatId" name="chatId"
                            class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm p-2 text-gray-100 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400">
                     <div id="chatIdError" class="mt-1 text-sm text-red-400 hidden">请输入 Chat Id</div>
                 </div>
 
                 <div>
                     <label for="authorization" class="block text-sm font-medium text-gray-300">Authorization</label>
-                    <input style="color: fieldtext" value="${authorization}" type="text" id="authorization" name="authorization"
+                    <input style="font-family: consolas; padding-inline: 0.25em; margin-top: 0.25em;" value="${authorization}" type="text" id="authorization" name="authorization"
                            class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm p-2 text-gray-100 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400">
                     <div id="authError" class="mt-1 text-sm text-red-400 hidden">请输入 Authorization</div>
                 </div>
