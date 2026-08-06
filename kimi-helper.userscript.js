@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Kimi
+// @name         KimiHelper
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  try to take over the world!
@@ -12,9 +12,7 @@
 // CHANGELOG
 // 1.0 初始化
 // @ts-check
-(async function () {
-  'use strict';
-
+;(async () => {
   // Your code here...
   const {
     $$,
@@ -25,40 +23,45 @@
     onChildChanged,
     // @ts-expect-error
     // eslint-disable-next-line no-undef
-  } = tampermonkeyUtils;
+  } = tampermonkeyUtils
 
   // @ts-expect-error
-  const label = generateLabel(GM_info);
-  const debugging = true;
-  const log = (...args) => debugging && console.log(label, ...args);
-  const error = (...args) => debugging && console.error(label, ...args);
+  const label = generateLabel(GM_info)
+  const debugging = true
+  const log = (...args) => debugging && console.log(label, ...args)
+  const error = (...args) => debugging && console.error(label, ...args)
 
-  main();
+  main()
 
   function main() {
-    init();
+    init()
 
-    onChildChanged(
-      document.body,
-      { predicate: (...args) => true, cb: (...arg) => {
+    onChildChanged(document.body, {
+      predicate: (...args) => true,
+      cb: (...arg) => {
         console.warn('[kimi-helper] init triggered on onChildChanged', Date.now())
         return init()
-      }, config: undefined, debounceTime: 200 },
-    )
+      },
+      config: undefined,
+      debounceTime: 200,
+    })
   }
 
   async function init() {
+    await ready('div.user-content')
 
-    await ready('div.user-content');
-
-    const divsHasTextStartsWithHttp = getElementsByText(/^https?:\/\//, 'div.user-content:not(.__transformed)')
+    const divsHasTextStartsWithHttp = getElementsByText(
+      /^https?:\/\//,
+      'div.user-content:not(.__transformed)',
+    )
     console.log('  [kimi-helper] divsHasTextStartsWithHttp', divsHasTextStartsWithHttp.length)
 
-    divsHasTextStartsWithHttp.forEach((div) => {
+    divsHasTextStartsWithHttp.forEach(div => {
       div.classList.add('__transformed')
-      div.innerHTML = div.innerHTML.replace(/(https?:\/\/\S+)/, '<a href="$1" target="_blank">$1</a>')
+      div.innerHTML = div.innerHTML.replace(
+        /(https?:\/\/\S+)/,
+        '<a href="$1" target="_blank">$1</a>',
+      )
     })
-
   }
-})();
-
+})()
