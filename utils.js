@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.28.2
+// @version      1.28.3
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -131,8 +131,10 @@
 
     findElementsByText: ${findElementsByText.toString()},
     getElementsByText: ${findElementsByText.toString()},
+    $texts: ${findElementsByText.toString()},
     getElementByText: ${getElementByText.toString()},
     $Text: ${getElementByText.toString()},
+    $text: ${getElementByText.toString()},
     getElementByTextAsync: ${getElementByTextAsync.toString()},
     getElementAsync: ${getElementAsync.toString()},
     $Async: ${getElementAsync.toString()},
@@ -559,10 +561,10 @@
       cb(e.detail.targetPath)
     }
 
-    document.body.addEventListener(eventName, listener)
+    document.body?.addEventListener(eventName, listener)
 
     return () => {
-      document.body.removeEventListener(eventName, listener)
+      document.body?.removeEventListener(eventName, listener)
     }
   }
 
@@ -1039,7 +1041,7 @@
     return await request(url)
   }
   function findVariablesLeakingIntoGlobalScope() {
-    const runtimeGlobals = getVariablesLeakingIntoGlobalScope()
+    const runtimeGlobals = tampermonkeyUtils.getVariablesLeakingIntoGlobalScope()
     console.log(
       'Runtime globals: count',
       runtimeGlobals.length,
@@ -1088,7 +1090,7 @@
 
     const id = [
       'tampermonkey-utils-npm-install',
-      originName.replaceAll('@', '-').replaceAll('.', '-'),
+      originName.replaceAll('@', '-').replaceAll('.', '-').replaceAll('/', '-').replaceAll(':', '-'),
       Date.now(),
     ].join('-')
     npmInstallScript.setAttribute('id', id)
