@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.28.2
+// @version      1.29.0
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -18,6 +18,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.29.0 console install npm pkg support esm (`https://esm.sh/${name}`) when unpkg installed failed
 // 1.28.1 修复 bing.com 无法安装包问题。原因：覆写了 document.body.appendChild 设置了白名单导致无法插入 script
 // 1.28.0 控制台安装包提示安装了哪一个包，以及如果存在可以通过参数强制覆盖安装，增加 emoji
 // 1.27.0 Add `observeResource` / `observerRequest` / `observeErrorRequest`
@@ -131,8 +132,10 @@
 
     findElementsByText: ${findElementsByText.toString()},
     getElementsByText: ${findElementsByText.toString()},
+    $texts: ${findElementsByText.toString()},
     getElementByText: ${getElementByText.toString()},
     $Text: ${getElementByText.toString()},
+    $text: ${getElementByText.toString()},
     getElementByTextAsync: ${getElementByTextAsync.toString()},
     getElementAsync: ${getElementAsync.toString()},
     $Async: ${getElementAsync.toString()},
@@ -213,7 +216,7 @@
       try {
         await func(...args);
       } finally {
-        log('🎉 耗时', time2Readable(start, Date.now))
+        log('🎉 耗时', time2Readable(start, Date.now()))
       }
     }
   }
@@ -363,7 +366,7 @@
     return [false, null];
   }
 
-  function sleep(ms) {
+  function sleep(ms = 0) {
     const time = typeof ms === 'number' ? ms : strToMilliseconds(ms)
 
     return new Promise((resolve) => {
@@ -559,10 +562,10 @@
       cb(e.detail.targetPath)
     }
 
-    document.body.addEventListener(eventName, listener)
+    document.body?.addEventListener(eventName, listener)
 
     return () => {
-      document.body.removeEventListener(eventName, listener)
+      document.body?.removeEventListener(eventName, listener)
     }
   }
 
@@ -1039,7 +1042,7 @@
     return await request(url)
   }
   function findVariablesLeakingIntoGlobalScope() {
-    const runtimeGlobals = getVariablesLeakingIntoGlobalScope()
+    const runtimeGlobals = tampermonkeyUtils.getVariablesLeakingIntoGlobalScope()
     console.log(
       'Runtime globals: count',
       runtimeGlobals.length,
@@ -1074,12 +1077,13 @@
 
   /** use tampermonkeyUtils.install instead */
   function __npmDownload(src, { originName, info, successCallback, errorCallback, beforeInsert }) {
-    const { __log: log, __warn: warn } = tampermonkeyUtils
+    const { __log: log, __warn: warn, sleep } = tampermonkeyUtils
     const label = '📦'
-    log(label, `'${originName}' installing ⏳...`)
 
-    const successTimerLabel = `✅ '${originName}' installed success costs ⏱️`
-    const failedTimerLabel = `‼️ '${originName}' installed failed costs ⏱️`
+    log(label, `'${src}' installing ⏳...`)
+
+    const successTimerLabel = `✅ '${src}' installed success costs ⏱️`
+    const failedTimerLabel = `‼️ '${src}' installed failed costs ⏱️`
 
     console.time(successTimerLabel)
     console.time(failedTimerLabel)
@@ -1088,24 +1092,46 @@
 
     const id = [
       'tampermonkey-utils-npm-install',
-      originName.replaceAll('@', '-').replaceAll('.', '-'),
+      originName.replaceAll('@', '-').replaceAll('.', '-').replaceAll('/', '-').replaceAll(':', '-'),
       Date.now(),
     ].join('-')
     npmInstallScript.setAttribute('id', id)
 
-    npmInstallScript.src = src
+    const isESM = src.includes(`esm`)
 
+    if (isESM) {
+      npmInstallScript.type = 'module'
+      npmInstallScript.textContent = `
+      import ${originName} from "${src}";
+      console.info("✅ Installed window.${originName}:", ${originName});
+      window.${originName} = ${originName}
+
+      document.querySelector(\`#${id}\`).onload()
+      `
+    } else {
+      npmInstallScript.src = src
+    }
     // npmInstallScript.setAttribute('crossorigin', '');
 
+    let errored = false
+    const onerror = error => {
+      errored = true
+      console.timeEnd(failedTimerLabel)
+      errorCallback(error)
+    }
+
+    window.addEventListener('error', (err) => {
+      console.warn('  📦 window on error', err)
+      onerror(err)
+    }, { once: true })
+
     npmInstallScript.onload = resp => {
+      if (errored) { return }
       console.timeEnd(successTimerLabel)
       successCallback(resp)
     }
 
-    npmInstallScript.onerror = error => {
-      console.timeEnd(failedTimerLabel)
-      errorCallback(error)
-    }
+    npmInstallScript.onerror = onerror
 
     /** func passed in should not be bound otherwise the result is always true */
     const isNativeCode = func => {
@@ -1141,7 +1167,7 @@
         throw new Error('Failed to insert script')
       }
     } finally {
-      npmInstallScript.remove()
+      sleep(200).then(() => npmInstallScript.remove())
     }
   }
 
@@ -1168,10 +1194,12 @@
     }
 
     if (/^https?:\/\//.test(originName)) {
-      npmDownload(originName, options)
+      const src = originName
+      const moduleName = originName.split('/').at(-1)
+      npmDownload(src, { ...options, originName: moduleName })
     } else {
       const endpoint = await fetchUnpkgCdn(originName)
-      log(label, 'install script', endpoint)
+      // log(label, 'install script', endpoint)
 
       npmDownload(endpoint, options)
     }
@@ -1206,6 +1234,7 @@
       __warn: warn,
       __npmInstallInBrowser: npmInstallInBrowser,
       getVariablesLeakingIntoGlobalScope,
+      sleep,
     } = tampermonkeyUtils
     const { force } = info
 
@@ -1253,14 +1282,58 @@
       added.length && log(label, 'Try input', `\`${added.at(-1)}\``, 'in the console.')
     }
 
-    try {
-      await npmInstallInBrowser(name, { info, beforeInsert })
-      success()
+    const names = [name, !name.startsWith('http') && `https://esm.sh/${name}`].filter(Boolean)
 
-      return true
-    } catch (err) {
-      error(label, err)
-      return false
+    const tries = names.map((name, index) =>
+      async () => {
+        await npmInstallInBrowser(name, { info, beforeInsert });
+        // console.info(Date.now(), 'resolved')
+
+//         return new Promise((resolve, reject) => {
+//           window.addEventListener('error', (err) => {
+//             console.warn(Date.now(), 'window on error', index, err)
+//             reject(err)
+//           }, { once: true })
+
+//           npmInstallInBrowser(name, { info, beforeInsert }).then(() => {
+//             resolve()
+//             console.info(Date.now(), 'resolved')
+//           })
+//         })
+    })
+
+    // console.group('install ' + names[0])
+
+    let lastErr
+    for (let i = 0; i < tries.length; i++) {
+      try {
+        console.group('Install ' + names[i])
+        await tries[i]()
+        success()
+        return true
+      } catch (err) {
+        lastErr = err
+        if (i !== tries.length - 1) {
+          console.warn('#' + i, 'tries failed, retry next...')
+        } else {
+          console.error('  All retries failed')
+        }
+      } finally {
+        console.groupEnd()
+      }
     }
+
+    error(label, lastErr)
+    return false
+
+//     try {
+//       success()
+
+//       return true
+//     } catch (err) {
+//       error(label, err)
+//       // switch to
+//       return false
+//     }
   }
 })()
