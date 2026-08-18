@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.29.0
+// @version      1.29.1
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -18,7 +18,8 @@
 // ==/UserScript==
 
 // CHANGELOG
-// 1.29.0 console install npm pkg support esm (`https://esm.sh/${name}`) when unpkg installed failed
+// 1.29.1 Fix: error when esm pkg name not camel case
+// 1.29.0 Feature: console install npm pkg support esm (`https://esm.sh/${name}`) when unpkg installed failed
 // 1.28.1 修复 bing.com 无法安装包问题。原因：覆写了 document.body.appendChild 设置了白名单导致无法插入 script
 // 1.28.0 控制台安装包提示安装了哪一个包，以及如果存在可以通过参数强制覆盖安装，增加 emoji
 // 1.27.0 Add `observeResource` / `observerRequest` / `observeErrorRequest`
@@ -107,6 +108,7 @@
 
     createStyle,
     toKebabCase,
+    toCamelCase: ${toCamelCase},
     withTime,
 
     // --- github utils begin ---
@@ -1075,9 +1077,16 @@
     return runtimeGlobals
   }
 
+  function toCamelCase(str) {
+    // console-table-printer => consoleTablePrinter
+    return str.replaceAll(/\-([a-z])/g, (m, p1) => {
+      return `${p1.toUpperCase()}`
+    })
+  }
+
   /** use tampermonkeyUtils.install instead */
   function __npmDownload(src, { originName, info, successCallback, errorCallback, beforeInsert }) {
-    const { __log: log, __warn: warn, sleep } = tampermonkeyUtils
+    const { __log: log, __warn: warn, sleep, toCamelCase } = tampermonkeyUtils
     const label = '📦'
 
     log(label, `'${src}' installing ⏳...`)
@@ -1103,12 +1112,25 @@
 
     const isESM = src.includes(`esm`)
 
+    const validVariabelName = toCamelCase(originName)
+
     if (isESM) {
       npmInstallScript.type = 'module'
       npmInstallScript.textContent = `
-      import ${originName} from "${src}";
-      console.info("✅ Installed window.${originName}:", ${originName});
-      window.${originName} = ${originName}
+      import ${validVariabelName} from "${src}";
+      import * as ${validVariabelName}All from "${src}";
+      //console.log(${validVariabelName})
+      //console.log(${validVariabelName}All)
+
+      if (${validVariabelName} && typeof ${validVariabelName} === 'object' && Object.keys(${validVariabelName}).length === 0) {
+        console.info("✅ Installed ${validVariabelName}All:", ${validVariabelName}All);
+        // Object.assign(window, ${validVariabelName}All)
+        window.${validVariabelName}All = ${validVariabelName}All
+      }
+      else {
+        console.info("✅ Installed window.${validVariabelName}:", ${validVariabelName}, '${validVariabelName}.'+Object.keys(${validVariabelName}).join('/'));
+        window.${validVariabelName} = ${validVariabelName}
+      }
 
       document.querySelector(\`#${id}\`).onload()
       `
@@ -1118,8 +1140,11 @@
     // npmInstallScript.setAttribute('crossorigin', '');
 
     let errored = false
+    let succeed = false
+    const { resolve, reject, promise: settled } = Promise.withResolvers()
     const onerror = error => {
       errored = true
+      reject(error)
       console.timeEnd(failedTimerLabel)
       errorCallback(error)
     }
@@ -1137,6 +1162,8 @@
       if (errored) {
         return
       }
+      succeed = true
+      resolve()
       console.timeEnd(successTimerLabel)
       successCallback(resp)
     }
@@ -1177,7 +1204,14 @@
         throw new Error('Failed to insert script')
       }
     } finally {
-      sleep(200).then(() => npmInstallScript.remove())
+      // console.time('script element can be removed safely')
+      settled
+        .catch(err => {})
+        .finally(() => {
+          // console.log('remove script element', { errored, succeed });
+          npmInstallScript.remove()
+          // console.timeEnd('script element can be removed safely') // 32ms
+        })
     }
   }
 
