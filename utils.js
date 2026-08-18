@@ -1092,7 +1092,11 @@
 
     const id = [
       'tampermonkey-utils-npm-install',
-      originName.replaceAll('@', '-').replaceAll('.', '-').replaceAll('/', '-').replaceAll(':', '-'),
+      originName
+        .replaceAll('@', '-')
+        .replaceAll('.', '-')
+        .replaceAll('/', '-')
+        .replaceAll(':', '-'),
       Date.now(),
     ].join('-')
     npmInstallScript.setAttribute('id', id)
@@ -1120,13 +1124,19 @@
       errorCallback(error)
     }
 
-    window.addEventListener('error', (err) => {
-      console.warn('  📦 window on error', err)
-      onerror(err)
-    }, { once: true })
+    window.addEventListener(
+      'error',
+      err => {
+        console.warn('  📦 window on error', err)
+        onerror(err)
+      },
+      { once: true },
+    )
 
     npmInstallScript.onload = resp => {
-      if (errored) { return }
+      if (errored) {
+        return
+      }
       console.timeEnd(successTimerLabel)
       successCallback(resp)
     }
@@ -1284,22 +1294,21 @@
 
     const names = [name, !name.startsWith('http') && `https://esm.sh/${name}`].filter(Boolean)
 
-    const tries = names.map((name, index) =>
-      async () => {
-        await npmInstallInBrowser(name, { info, beforeInsert });
-        // console.info(Date.now(), 'resolved')
+    const tries = names.map((name, index) => async () => {
+      await npmInstallInBrowser(name, { info, beforeInsert })
+      // console.info(Date.now(), 'resolved')
 
-//         return new Promise((resolve, reject) => {
-//           window.addEventListener('error', (err) => {
-//             console.warn(Date.now(), 'window on error', index, err)
-//             reject(err)
-//           }, { once: true })
+      //         return new Promise((resolve, reject) => {
+      //           window.addEventListener('error', (err) => {
+      //             console.warn(Date.now(), 'window on error', index, err)
+      //             reject(err)
+      //           }, { once: true })
 
-//           npmInstallInBrowser(name, { info, beforeInsert }).then(() => {
-//             resolve()
-//             console.info(Date.now(), 'resolved')
-//           })
-//         })
+      //           npmInstallInBrowser(name, { info, beforeInsert }).then(() => {
+      //             resolve()
+      //             console.info(Date.now(), 'resolved')
+      //           })
+      //         })
     })
 
     // console.group('install ' + names[0])
@@ -1326,14 +1335,14 @@
     error(label, lastErr)
     return false
 
-//     try {
-//       success()
+    //     try {
+    //       success()
 
-//       return true
-//     } catch (err) {
-//       error(label, err)
-//       // switch to
-//       return false
-//     }
+    //       return true
+    //     } catch (err) {
+    //       error(label, err)
+    //       // switch to
+    //       return false
+    //     }
   }
 })()
