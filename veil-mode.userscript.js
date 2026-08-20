@@ -45,9 +45,7 @@
 
   const config = {
     readySelector: 'header',
-    get selectors() {
-      return ['header', 'aside', 'nav'].join(',')
-    },
+    selectors: ['header', 'aside', 'nav'].join(','),
     site: {
       'juejin.cn': {
         get selectors() {
