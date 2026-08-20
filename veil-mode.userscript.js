@@ -1,17 +1,20 @@
 // ==UserScript==
-// @name         VeilMode🧕
+// @name         MonaLisa🧕
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  try to take over the world!
 // @author       legend80s
 // @match        https://programmercarl.com/*
-// @match        https://juejin.cn/*
-
+// @match        https://juejin.cn
+// @match        https://juejin.cn/post/*
+// @match        https://juejin.cn/spost/*
+// @match        https://mp.weixin.qq.com/cgi-bin/home*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=programmercarl.com
 // @grant        GM_info
 // ==/UserScript==
 
 // CHANGELOG
+// 2.1 支持微信公众号后台、不同长度元素应用不同 blur 程度
 // 2.0 支持网站定制化需要遮盖的内容
 // 1.0 初始化
 // @ts-check
@@ -35,11 +38,15 @@
   const label = generateLabel(GM_info)
   const debugging = true
   const log = (...args) => debugging && console.log(label, ...args)
+  const warn = (...args) => debugging && console.warn(label, ...args)
   const error = (...args) => debugging && console.error(label, ...args)
 
+  const selectorize = arr => arr.map(s => `,${s}`).join('')
+
   const config = {
+    readySelector: 'header',
     get selectors() {
-      return 'header, aside, nav'
+      return ['header', 'aside', 'nav'].join(',')
     },
     site: {
       'juejin.cn': {
@@ -49,11 +56,34 @@
           )
         },
       },
+      'mp.weixin.qq.com': {
+        readySelector: 'h2',
+        get selectors() {
+          return (
+            config.selectors +
+            selectorize([
+              '#js_mp_sidemenu',
+              '.weui-desktop-grid.data_container',
+              '.weui-desktop-list.weui-desktop-home-msg',
+            ])
+          )
+        },
+      },
     },
   }
-  function matchHost() {}
 
-  const { selectors = config.selectors } = config.site[location.hostname] || config
+  const config1 = {
+    selectors: 'header,aside,nav',
+    site: {
+      'juejin.cn': {
+        selectors:
+          config.selectors + ', .article-suspended-panel, #sidebar-container, .suspension-panel',
+      },
+    },
+  }
+
+  const { selectors = config.selectors, readySelector = config.readySelector } =
+    config.site[location.hostname] || config
 
   const namespace = `__tm_` // tm for tampermonkey
   function genKey(rawKey) {
@@ -62,13 +92,19 @@
   const keyFocusMode = genKey('focuseMode')
   const focusModeInStorage = localStorage.getItem(keyFocusMode)
 
-  let focuseModeOn = focusModeInStorage === 'on'
+  // 默认开启
+  let focuseModeOn = !focusModeInStorage || focusModeInStorage === 'on'
 
   const { boot, toast } = await import('https://esm.sh/sourdough-toast@0.3.0')
 
   const frosty = {
-    opacity: 0.35,
-    filter: 'blur(4px)',
+    opacity: '0.35',
+    filter(el) {
+      const w = el.getBoundingClientRect().width
+      const blurness = w >= 1600 ? 8 : w >= 1000 ? 6 : 4
+      log('blurness:', blurness)
+      return `blur(${blurness}px)`
+    },
     transition: `opacity .35s ease, filter .35s ease`,
   }
 
@@ -124,8 +160,7 @@
       richColors: true,
       duration: 1000,
     }
-    const ret = boot(opts)
-    // console.log(boot, opts)
+    boot(opts)
 
     const toastElement = /** @type {HTMLDivElement} */ (
       document.querySelector('ol[data-sourdough-toaster]')
@@ -187,6 +222,7 @@
       setTimeout(() => {
         // console.log(1, feedback, toast, toast.info, toast.success)
         // toast.info(feedback)
+        ;(focuseModeOn ? log : warn)(feedback)
         toast[focuseModeOn ? 'success' : 'warning'](feedback)
         //console.log(2, feedback)
       })
@@ -199,14 +235,19 @@
   }
 
   function wearVeil(el) {
+    if (el.style.opacity === frosty.opacity) {
+      return
+    }
     el.style.opacity = frosty.opacity
-    el.style.filter = frosty.filter
+    el.style.filter = frosty.filter(el)
   }
 
   async function init() {
-    await ready('header')
+    log('readySelector', readySelector)
+    await ready(readySelector) // header
 
     const elements = $$(selectors)
+    log('elements', elements)
 
     elements.forEach(el => {
       el.style.transition = frosty.transition
