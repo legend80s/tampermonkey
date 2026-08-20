@@ -104,7 +104,7 @@
 
   function bootSonner() {
     document.head.insertAdjacentHTML(
-      'beforeEnd',
+      'beforeend',
       `<link
       rel="stylesheet"
       href="https://esm.sh/sourdough-toast@0.3.0/sourdough-toast.css"
@@ -148,7 +148,7 @@
       </button>
     </div>`
 
-    document.body.insertAdjacentHTML(`afterBegin`, tooglerHtml)
+    document.body.insertAdjacentHTML(`afterbegin`, tooglerHtml)
     const box = $('#' + id)
     const style1 = {
       position: `fixed`,
