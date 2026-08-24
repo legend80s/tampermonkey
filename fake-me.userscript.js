@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FakeMe🎭
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  try to take over the world!
 // @author       legend80s
 // @match        https://programmercarl.com/algo/*
@@ -15,6 +15,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 2.1 fix mock和原文接连出现多个标点符号。
 // 2.0 替换 placeholder、图片同尺寸但是不同src需要不同fake、fix mock 后的文字不连续。尚未解决mock和原文同一处出现多个标点符号。
 // 1.0 初始化
 // @ts-check
@@ -284,12 +285,13 @@
 
       const originalLength = originalText.length
       // let newText = '';
+      const PUNC = /[，。：、！；‘’“”？]$/
 
       // 尝试生成与原文长度相近的 Faker 句子
       let attempts = 0
       let spliced = []
       function nextFakeText() {
-        const text = fake()
+        const text = fake().replace(PUNC, '')
         return Array.from(text)
       }
       let fakerText = nextFakeText()
@@ -298,7 +300,7 @@
 
       let newText = originalText.replace(
         /[^\p{Emoji}\^#\s\w\.,;:!?()\[\]{}'"，。、！？；：""''（）【】《》……——\+\-\*\/=<>≤≥≠≈±×÷]+/gu,
-        match => {
+        (match, offset) => {
           debug && console.log('match', { match })
           spliced = fakerText.splice(0, match.length)
           let attempt = 0
@@ -311,10 +313,27 @@
             attempt++
             // start2 += match.length
           }
+          // multiple punctuations
+          const isEnd = char => char === undefined
+          if (
+            isPunc(spliced.at(-1)) &&
+            (isPunc(originalText[offset + match.length]) ||
+              isEnd(originalText[offset + match.length]))
+          ) {
+            // console.warn('multiple punctuations', spliced, originalText[offset + match.length])
+            // spliced.pop()
+            // replace with invisible zero width joiner 1 to keep the length 2 not show to user
+            spliced[spliced.length - 1] = '\u200D' // &zwj;
+          }
+
           // start += match.length
           return spliced.join('') + (debug ? '|' : '')
         },
       )
+
+      function isPunc(char) {
+        return PUNC.test(char)
+      }
 
       // throw new Error('Bug: length not equal')
       const diff = newText.length - originalLength
