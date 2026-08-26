@@ -22,11 +22,13 @@
   // Your code here...
   const {
     $,
+    sleep,
     ready,
     createLoggers,
     time2Readable,
     getElementByText,
-    bindShortcuts,
+    bindShortcutsx,
+    debounce,
     // eslint-disable-next-line no-undef
   } = tampermonkeyUtils;
 
@@ -57,7 +59,7 @@
     });
 
     //     log('nodes', nodes)
-    nodes.forEach((f) => f.remove());
+    nodes.forEach((f) => f?.remove());
 
     $('.page_body').style.paddingTop = '2rem';
 
@@ -68,12 +70,37 @@
       time2Readable(begin, Date.now())
     );
 
+    const full = async () => {
+      await sleep(500)
+      document.querySelector(`#player_fullscreen_no_mouseover_player`).click()
+    }
+
+    const params = new URLSearchParams(location.search);
+
+    // params.get('full') === 'yes' && full();
+
+    function insertSearch(search, key, value) {
+      const params = new URLSearchParams(search);
+
+      // 更新
+      params.set(key, value);
+
+      // 返回更新后参数（可选）
+      return params.toString();
+    }
+
     const cctvNumberSwitches = Array.from({ length: 17 }, (_value, index) => {
       const channel = String(index + 1);
+      const anchor = getElementByText(new RegExp(`CCTV\-${channel}`), 'a')
       return {
         key: channel,
-        desc: 'Play CCTV ' + channel,
-        cb: () => getElementByText(new RegExp(`CCTV\-${channel}`), 'a').click(),
+        desc: 'Play ' + anchor.textContent.trim(),
+        cb: () => {
+          const full = document.fullscreen
+          // Add full to url next time render the page will go to fullscreen automatically.
+          full && (anchor.search = insertSearch(anchor.search, 'full', 'yes'))
+          anchor.click()
+        },
       };
     });
 
@@ -85,10 +112,7 @@
       {
         key: 'f',
         desc: 'Full Screen',
-        cb: () =>
-          document
-            .querySelector(`#player_fullscreen_no_mouseover_player`)
-            .click(),
+        cb: full,
       },
       {
         key: '5p',
@@ -128,5 +152,90 @@
       },
       ...cctvNumberSwitches,
     ]);
+  }
+
+//   function debounce(func, time) {
+//     let timer;
+//     return () => {
+//       timer && clearTimeout(timer);
+
+//       timer = setTimeout(() => {
+//         func();
+//       }, time);
+//     };
+//   }
+
+  function toast(msg, { duration = 500, onClose } = {}) {
+    const el = $(`#pressed-keys`);
+    el.style.display = 'inline-block';
+    el.querySelector('span').textContent = msg;
+
+    setTimeout(() => {
+      el.style.display = 'none';
+      onClose?.();
+    }, duration);
+  }
+
+  function showPressedKeys(keys) {
+    const keying = `<code id="pressed-keys" style="
+  background: rgb(42 39 39 / 80%);
+  position: absolute;
+  top: 45vh;
+  left: 50%;
+  transform: translate(-50%);
+  z-index: 1000;
+  padding: 0.8rem 1.2rem;
+  border-radius: 0.5rem;
+  font-size: 140%;
+  color: white;
+  font-family: inherit;
+
+"><kbd style=" font-size: 120%; color: blue; margin-inline-end: 0.25em;">🖱️</kbd><span></span></code>`;
+
+    let el = $(`#pressed-keys`);
+
+    if (!el) {
+      $('body').insertAdjacentHTML('afterbegin', keying);
+      el = $(`#pressed-keys`);
+    }
+
+    if (!keys.length) {
+      el.style.display = 'none';
+    } else {
+      el.style.display = 'flex';
+      const text = keys
+        .map((k) => (k.length === 1 ? k.toUpperCase() : k))
+        .join(' ');
+      el.querySelector('span').textContent = text;
+    }
+  }
+
+  function bindShortcuts(shortcuts) {
+    console.log(shortcuts);
+    let pressedKeys = [];
+
+    const callComboKey = debounce(() => {
+      // console.log('pressedKeys', pressedKeys)
+      const comboKey = pressedKeys.join('');
+      pressedKeys = [];
+      showPressedKeys(pressedKeys);
+
+      shortcuts.some((item) => {
+        const { key, cb, desc } = item;
+
+        if (key === comboKey) {
+          toast(desc, { onClose: cb });
+
+          return true;
+        }
+      });
+    }, 1000 * 1);
+
+    document.addEventListener('keydown', (event) => {
+      pressedKeys.push(event.key === ' ' ? '␣' : event.key);
+      showPressedKeys(pressedKeys);
+      // console.log('keydown', event, event.key, pressedKeys)
+      callComboKey();
+    });
   }
 })();
