@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         插件通用 utils
 // @namespace    http://tampermonkey.net/
-// @version      1.29.1
+// @version      1.29.2
 // @description  A tools like jQuery or lodash but for Tampermonkey.
 // @author       legend80s
 // @match        http://*/*
@@ -18,6 +18,7 @@
 // ==/UserScript==
 
 // CHANGELOG
+// 1.29.2 Feature: logWithColor
 // 1.29.1 Fix: error when esm pkg name not camel case
 // 1.29.0 Feature: console install npm pkg support esm (`https://esm.sh/${name}`) when unpkg installed failed
 // 1.28.1 修复 bing.com 无法安装包问题。原因：覆写了 document.body.appendChild 设置了白名单导致无法插入 script
@@ -64,6 +65,7 @@
   const tampermonkeyUtils = {
     __error: error,
     __log: log,
+    logWithColor: ${logWithColor.toString()},
     __warn: warn,
 
     $: ${powerfulQuerySelector.toString()},
@@ -107,6 +109,7 @@
     seconds,
 
     createStyle,
+    stylish: createStyle,
     toKebabCase,
     toCamelCase: ${toCamelCase},
     withTime,
@@ -226,15 +229,16 @@
   /**
    * @public
    * @param {import("react").CSSProperties} params
+   * @returns 'background: rgba(16, 183, 127, 0.14); padding: 0.5rem; display: inline-block;'
    */
   function createStyle(params) {
     return Object.keys(params)
       .map((key) => {
         const rule = params[key];
 
-        return toKebabCase(key) + ': ' + rule
+        return toKebabCase(key) + ': ' + rule + ';'
       }, '')
-      .join('; ')
+      .join(' ')
   }
 
   /**
@@ -254,7 +258,9 @@
     const seconds = duration / 1000
     const min = seconds / 60;
 
-    const text = min >= 1 ? minutes2Readable(min) : \`\${seconds.toFixed(2)} 秒\`;
+    const text = min >= 1 ?
+      minutes2Readable(min) :
+      seconds >= 1 ? \`\${seconds.toFixed(2)} 秒\` : \`\${(seconds * 1000).toFixed(2)} 毫秒\`;
 
     return text;
   }
@@ -324,7 +330,7 @@
     }
 
   /**
-   * @param {string|() => boolean} readySentry
+   * @param {string | () => Element} readySentry
    * @returns {Promise<[boolean, HTMLElement]>}
    */
   async function ready(readySentry, options = {}) {
@@ -344,7 +350,7 @@
   }
 
   /**
-   * @param {string|() => boolean} readySentry
+   * @param {string | () => Element} readySentry
    * @returns {Promise<[boolean, HTMLElement]>}
    */
   async function readyCore(readySentry, { timeout = 5 * 1000, interval = 500 } = {}) {
@@ -777,6 +783,37 @@
     return target
   }
 
+  /**
+   * @example
+   * console.log(`%cIf you would like to test Faker in the browser console, you can do so using 'await enableFaker()'.
+If you would like to test Faker in a playground, visit https://new.fakerjs.dev.`, logStyle);
+   */
+  function logWithColor(...args) {
+    const last = args.at(-1)
+    // if is style opts
+    let logStyle = {}
+    let msgs = []
+    if (last && typeof last === 'object' && 'logStyle' in last) {
+      logStyle = last
+      msgs = args.slice(0, -1)
+    } else {
+      msgs = args
+    }
+
+    const { stylish } = window.tampermonkeyUtils
+
+    const defaultStyle = {
+      background: 'rgba(16, 183, 127, 0.14)',
+      padding: '0.5rem',
+      display: 'inline-block',
+    }
+    const style = stylish(Object.assign(defaultStyle, logStyle))
+    const text = msgs.join(' ')
+
+    // "background: rgba(16, 183, 127, 0.14); padding: 0.5rem; display: inline-block;";
+    console.log(`%c${text}`, style)
+  }
+
   function powerfulQuerySelector(selector) {
     // a[text=历史] a[text=/历史/] a[text=/\\d历史/]
     const matches = selector.match(/(.+)?\[text=(.+)+\]/)
@@ -1086,7 +1123,7 @@
 
   /** use tampermonkeyUtils.install instead */
   function __npmDownload(src, { originName, info, successCallback, errorCallback, beforeInsert }) {
-    const { __log: log, __warn: warn, sleep, toCamelCase } = tampermonkeyUtils
+    const { logWithColor: log, __warn: warn, sleep, toCamelCase } = tampermonkeyUtils
     const label = '📦'
 
     log(label, `'${src}' installing ⏳...`)
@@ -1128,7 +1165,13 @@
         window.${validVariabelName}All = ${validVariabelName}All
       }
       else {
-        console.info("✅ Installed window.${validVariabelName}:", ${validVariabelName}, '${validVariabelName}.'+Object.keys(${validVariabelName}).join('/'));
+//         console.info("✅ Installed window.${validVariabelName}:", ${validVariabelName}, '${validVariabelName}.' +
+//           Object.keys(${validVariabelName}).filter(k => !k.startsWith('_')).join(' / ')
+//         );
+        console.info("%c✅ Installed window.${validVariabelName}: ${validVariabelName}." +
+          Object.keys(${validVariabelName}).filter(k => !k.startsWith('_')).join(' / '),
+          'background: rgba(16, 183, 127, 0.14); padding: 0.5rem;'
+        );
         window.${validVariabelName} = ${validVariabelName}
       }
 
@@ -1273,7 +1316,7 @@
    */
   async function install(name, info = {}) {
     const {
-      __log: log,
+      logWithColor: log,
       __error: error,
       __warn: warn,
       __npmInstallInBrowser: npmInstallInBrowser,
